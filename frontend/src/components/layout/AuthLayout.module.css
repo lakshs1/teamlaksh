@@ -1,0 +1,100 @@
+.root {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+}
+
+/* ---- Left Brand Panel ---- */
+.brand {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--space-12);
+  background: var(--color-primary);
+  color: white;
+  position: relative;
+  overflow: hidden;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-12);
+}
+
+.logoMark {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: var(--text-lg);
+  color: white;
+}
+
+.logoText {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: white;
+  letter-spacing: -0.5px;
+}
+
+.tagline {
+  font-size: var(--text-4xl);
+  font-weight: var(--font-black);
+  line-height: 1.15;
+  color: white;
+  margin-bottom: var(--space-4);
+  letter-spacing: -1px;
+}
+
+.sub {
+  font-size: var(--text-base);
+  color: rgba(255, 255, 255, 0.75);
+  margin-bottom: var(--space-12);
+}
+
+.featureIcons {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: auto;
+}
+
+.featureIcon {
+  font-size: 2rem;
+  opacity: 0.8;
+  transition: transform var(--transition-base), opacity var(--transition-base);
+}
+
+.featureIcon:hover {
+  transform: scale(1.15) rotate(-5deg);
+  opacity: 1;
+}
+
+/* ---- Right Form Panel ---- */
+.form {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-6);
+  overflow-y: auto;
+}
+
+/* ---- Responsive ---- */
+@media (min-width: 768px) {
+  .brand {
+    display: flex;
+    flex: 0 0 420px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .brand {
+    flex: 0 0 480px;
+  }
+}

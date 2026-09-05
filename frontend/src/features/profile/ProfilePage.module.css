@@ -1,0 +1,10 @@
+.container { max-width: 640px; margin: 0 auto; padding: var(--space-8) var(--space-6); }
+.header { margin-bottom: var(--space-6); }
+.title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text); margin-bottom: 0.25rem; }
+.subtitle { font-size: var(--text-sm); color: var(--color-text-muted); }
+.profileCard { }
+.avatarSection { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); padding-bottom: var(--space-6); border-bottom: 1px solid var(--color-border); }
+.profileName { font-size: var(--text-lg); font-weight: 700; color: var(--color-text); }
+.profileRole { font-size: var(--text-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.form { display: flex; flex-direction: column; gap: var(--space-4); }
+.actions { display: flex; gap: var(--space-3); margin-top: var(--space-2); }

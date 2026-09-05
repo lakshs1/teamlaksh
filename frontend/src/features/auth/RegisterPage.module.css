@@ -1,0 +1,7 @@
+.card { width: 100%; max-width: 440px; }
+.header { text-align: center; margin-bottom: var(--space-6); }
+.title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-1); }
+.subtitle { font-size: var(--text-sm); color: var(--color-text-muted); }
+.form { display: flex; flex-direction: column; gap: var(--space-4); }
+.footer { text-align: center; font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-4); }
+.link { color: var(--color-primary); font-weight: 600; }
