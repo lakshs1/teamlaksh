@@ -8,6 +8,7 @@ import {
   integer,
   numeric,
   unique,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -32,6 +33,28 @@ export const users = pgTable("users", {
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  code: text("code"),
+  leaderId: integer("leader_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  tagline: text("tagline"),
+  description: text("description"),
+  techStack: jsonb("tech_stack"),
+  repoUrl: text("repo_url"),
+  demoUrl: text("demo_url"),
+  teamId: integer("team_id").references(() => teams.id),
+  status: text("status").default("active"),
+  upvotes: integer("upvotes").default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ============================================================================
@@ -458,6 +481,22 @@ export const usersRelations = relations(users, ({ many }) => ({
   approvalLogs: many(approvalLogs),
   managedFulfillments: many(fulfillmentSplits),
   stockMovements: many(stockMovements),
+  ledTeams: many(teams),
+}));
+
+export const teamsRelations = relations(teams, ({ one, many }) => ({
+  leader: one(users, {
+    fields: [teams.leaderId],
+    references: [users.id],
+  }),
+  projects: many(projects),
+}));
+
+export const projectsRelations = relations(projects, ({ one }) => ({
+  team: one(teams, {
+    fields: [projects.teamId],
+    references: [teams.id],
+  }),
 }));
 
 export const customerTiersRelations = relations(customerTiers, ({ many }) => ({
@@ -661,3 +700,13 @@ export type Backorder = z.infer<typeof selectBackorderSchema>;
 export const insertStockMovementSchema = createInsertSchema(stockMovements);
 export const selectStockMovementSchema = createSelectSchema(stockMovements);
 export type StockMovement = z.infer<typeof selectStockMovementSchema>;
+
+export const insertTeamSchema = createInsertSchema(teams);
+export const selectTeamSchema = createSelectSchema(teams);
+export type Team = z.infer<typeof selectTeamSchema>;
+export type NewTeam = z.infer<typeof insertTeamSchema>;
+
+export const insertProjectSchema = createInsertSchema(projects);
+export const selectProjectSchema = createSelectSchema(projects);
+export type Project = z.infer<typeof selectProjectSchema>;
+export type NewProject = z.infer<typeof insertProjectSchema>;
