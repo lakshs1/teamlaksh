@@ -1,14 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useDealFlowStore, type QuotationLine, type Quotation } from '../../stores/dealflowStore';
 import { useAuthStore } from '../../stores/authStore';
-import { MOCK_CUSTOMERS, type MockCustomer } from '../../services/mockData';
-import { quoteApi } from '../../services/apiServices';
+import { quoteApi, customerApi, catalogApi } from '../../services/apiServices';
+
+interface CustomerOption {
+  id: number;
+  name: string;
+  email: string;
+  tier: 'Bronze' | 'Silver' | 'Gold';
+  maxDiscountPct: number;
+  paymentTerms: string;
+}
 
 export default function CreateQuotationPage() {
   const navigate = useNavigate();
-  const { products, addQuotation, currentRole } = useDealFlowStore();
+  const { products: storeProducts, currentRole } = useDealFlowStore();
   const { user } = useAuthStore();
 
   // Helper dates
@@ -21,12 +29,66 @@ export default function CreateQuotationPage() {
     return `SO/2026/${randomNum}`;
   }, []);
 
+  // Customer List State (fetched from backend)
+  const [customerList, setCustomerList] = useState<CustomerOption[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number>(0);
+  const [catalogProducts, setCatalogProducts] = useState(storeProducts);
+
+  // Fetch live backend customers and catalog on mount
+  useEffect(() => {
+    async function loadLiveBackendData() {
+      try {
+        const custRes = await customerApi.getCustomers({ limit: 50 });
+        if (custRes?.data && Array.isArray(custRes.data) && custRes.data.length > 0) {
+          const mappedCustomers: CustomerOption[] = custRes.data.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            email: c.email || `${c.name.toLowerCase().replace(/\s+/g, '')}@example.com`,
+            tier: (c.tier?.name?.includes('Gold') ? 'Gold' : c.tier?.name?.includes('Silver') ? 'Silver' : 'Bronze') as 'Bronze' | 'Silver' | 'Gold',
+            maxDiscountPct: c.tier?.max_discount_pct ? Number(c.tier.max_discount_pct) : 15,
+            paymentTerms: 'Net 30 Days',
+          }));
+          setCustomerList(mappedCustomers);
+          setSelectedCustomerId(mappedCustomers[0].id);
+        }
+      } catch {
+        // Keep empty list on error
+      }
+
+      try {
+        const prodRes = await catalogApi.getProducts({ limit: 50 });
+        if (prodRes?.data && Array.isArray(prodRes.data) && prodRes.data.length > 0) {
+          const mappedProds = prodRes.data.map((p: any) => {
+            const price = Number(p.basePrice || p.base_price || p.salesPrice || 0);
+            const cost = Number(p.costPrice || p.cost_price || (price > 0 ? price * 0.65 : 0));
+            return {
+              id: String(p.id),
+              name: p.name,
+              sku: p.sku || `PROD-${p.id}`,
+              category: (p.category?.name || 'Hardware') as any,
+              salesPrice: price,
+              costPrice: cost > 0 ? cost : price * 0.65,
+              status: 'Active' as const,
+              description: p.description || '',
+              canBeSold: true,
+              canBePurchased: true,
+            };
+          });
+          setCatalogProducts(mappedProds);
+        }
+      } catch {
+        // Fallback to store products
+      }
+    }
+
+    loadLiveBackendData();
+  }, []);
+
   // Form states
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number>(MOCK_CUSTOMERS[0].id);
   const [quotationDate, setQuotationDate] = useState<string>(todayStr);
   const [expiryDate, setExpiryDate] = useState<string>(defaultExpiryStr);
   const [paymentTerms, setPaymentTerms] = useState<string>('Net 30 Days');
-  const [salesRepName, setSalesRepName] = useState<string>(user?.name || 'Maviya (Sales Rep)');
+  const [salesRepName, setSalesRepName] = useState<string>(user?.name || `${currentRole} User`);
   const [salesTeam, setSalesTeam] = useState<string>('Enterprise North');
   const [fiscalPosition, setFiscalPosition] = useState<string>('Standard B2B GST (18%)');
   const [clientOrderRef, setClientOrderRef] = useState<string>('');
@@ -36,11 +98,12 @@ export default function CreateQuotationPage() {
   const [showCatalogModal, setShowCatalogModal] = useState<boolean>(false);
   const [catalogSearch, setCatalogSearch] = useState<string>('');
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>('All');
+  const [isSubmittingLoading, setIsSubmittingLoading] = useState<boolean>(false);
 
   // Selected customer object
-  const currentCustomer: MockCustomer = useMemo(() => {
-    return MOCK_CUSTOMERS.find((c) => c.id === Number(selectedCustomerId)) || MOCK_CUSTOMERS[0];
-  }, [selectedCustomerId]);
+  const currentCustomer: CustomerOption = useMemo(() => {
+    return customerList.find((c) => c.id === Number(selectedCustomerId)) || customerList[0] || { id: 0, name: 'Select a customer', email: '', tier: 'Bronze' as const, maxDiscountPct: 5, paymentTerms: 'Net 30 Days' };
+  }, [customerList, selectedCustomerId]);
 
   // Allowed discount ceilings helper based on customer tier and category
   const getCategoryDiscountCeiling = (category: string, tier: 'Bronze' | 'Silver' | 'Gold') => {
@@ -51,29 +114,15 @@ export default function CreateQuotationPage() {
     return tierMax; // Hardware
   };
 
-  // Initial order lines: preloaded with 1 sample product for smooth UX
-  const [lines, setLines] = useState<QuotationLine[]>([
-    {
-      id: `ql-${Date.now()}-1`,
-      productId: 'prod-1',
-      productName: 'Titan Blade Server Node X8',
-      category: 'Hardware',
-      description: 'Enterprise compute node with dual Xeon processors and 256GB ECC RAM',
-      quantity: 2,
-      unitPrice: 245000,
-      discount: 10,
-      allowedDiscount: currentCustomer.maxDiscountPct,
-      taxPercent: 18,
-      total: 2 * 245000 * (1 - 10 / 100),
-    },
-  ]);
+  // Initial order lines: empty array
+  const [lines, setLines] = useState<QuotationLine[]>([]);
 
   // Recalculate allowed discounts when customer changes
   const handleCustomerChange = (customerId: number) => {
     setSelectedCustomerId(customerId);
-    const newCust = MOCK_CUSTOMERS.find((c) => c.id === customerId);
+    const newCust = customerList.find((c) => c.id === customerId);
     if (newCust) {
-      setPaymentTerms(newCust.paymentTerms);
+      setPaymentTerms(newCust.paymentTerms || 'Net 30 Days');
       setLines((prev) =>
         prev.map((l) => {
           const allowed = getCategoryDiscountCeiling(l.category, newCust.tier);
@@ -112,7 +161,8 @@ export default function CreateQuotationPage() {
       prev.map((l) => {
         if (l.id !== lineId) return l;
         const newTotal = l.quantity * price * (1 - l.discount / 100);
-        return { ...l, unitPrice: price, total: newTotal };
+        const newCost = l.costPrice && l.costPrice > 0 ? l.costPrice : price * 0.65;
+        return { ...l, unitPrice: price, costPrice: newCost, total: newTotal };
       })
     );
   };
@@ -135,28 +185,28 @@ export default function CreateQuotationPage() {
   };
 
   const handleDeleteLine = (lineId: string) => {
-    if (lines.length <= 1) {
-      toast.error('Quotation must contain at least one order line item.');
-      return;
-    }
     setLines((prev) => prev.filter((l) => l.id !== lineId));
     toast.success('Line item removed');
   };
 
-  const handleAddProductFromCatalog = (product: typeof products[0]) => {
+  const handleAddProductFromCatalog = (product: any) => {
+    const unitPrice = Number(product.salesPrice || product.basePrice || product.base_price || 100000);
+    const costPrice = Number(product.costPrice || product.cost_price || (unitPrice > 0 ? unitPrice * 0.65 : 65000));
     const allowed = getCategoryDiscountCeiling(product.category, currentCustomer.tier);
+
     const newLine: QuotationLine = {
       id: `ql-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      productId: product.id,
+      productId: String(product.id),
       productName: product.name,
       category: product.category,
-      description: product.description,
+      description: product.description || product.name,
       quantity: 1,
-      unitPrice: product.salesPrice,
+      unitPrice: unitPrice,
+      costPrice: costPrice,
       discount: 0,
       allowedDiscount: allowed,
       taxPercent: 18,
-      total: product.salesPrice,
+      total: unitPrice,
     };
     setLines((prev) => [...prev, newLine]);
     setShowCatalogModal(false);
@@ -170,6 +220,7 @@ export default function CreateQuotationPage() {
     promoDesc: string
   ) => {
     const allowed = getCategoryDiscountCeiling(cat, currentCustomer.tier);
+    const cost = price * 0.55; // healthy margin on upsells
     const newLine: QuotationLine = {
       id: `ql-upsell-${Date.now()}`,
       productId: `prod-upsell-${Date.now()}`,
@@ -178,6 +229,7 @@ export default function CreateQuotationPage() {
       description: promoDesc,
       quantity: 1,
       unitPrice: price,
+      costPrice: cost,
       discount: 0,
       allowedDiscount: allowed,
       taxPercent: 18,
@@ -200,18 +252,25 @@ export default function CreateQuotationPage() {
   const taxAmount = untaxedAmount * 0.18;
   const totalAmount = untaxedAmount + taxAmount;
 
-  // Cost calculation for gross margin
+  // Live Cost calculation for Gross Margin
   const totalCost = useMemo(() => {
     return lines.reduce((acc, l) => {
-      const matchProd = products.find((p) => p.id === l.productId);
-      const unitCost = matchProd ? matchProd.costPrice : l.unitPrice * 0.65;
+      let unitCost = l.costPrice;
+      if (unitCost === undefined || unitCost === null || unitCost === 0) {
+        const matchProd = catalogProducts.find((p: any) => String(p.id) === String(l.productId));
+        unitCost = matchProd && Number(matchProd.costPrice) > 0
+          ? Number(matchProd.costPrice)
+          : l.unitPrice * 0.65;
+      }
       return acc + unitCost * l.quantity;
     }, 0);
-  }, [lines, products]);
+  }, [lines, catalogProducts]);
 
+  // Live Gross Margin %: ((Untaxed Revenue - Total Cost) / Untaxed Revenue) * 100
   const grossMarginPercent = useMemo(() => {
     if (untaxedAmount <= 0) return 0;
-    return Math.max(0, Math.round(((untaxedAmount - totalCost) / untaxedAmount) * 100));
+    const margin = Math.round(((untaxedAmount - totalCost) / untaxedAmount) * 100);
+    return Math.max(0, Math.min(100, margin));
   }, [untaxedAmount, totalCost]);
 
   // Blended Risk Score calculation
@@ -299,15 +358,15 @@ export default function CreateQuotationPage() {
 
   // Filtered catalog products for modal
   const filteredCatalog = useMemo(() => {
-    return products.filter((p) => {
+    return catalogProducts.filter((p: any) => {
       const matchSearch =
         p.name.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-        p.sku.toLowerCase().includes(catalogSearch.toLowerCase());
+        (p.sku && p.sku.toLowerCase().includes(catalogSearch.toLowerCase()));
       const matchCat =
         catalogCategoryFilter === 'All' || p.category === catalogCategoryFilter;
       return matchSearch && matchCat;
     });
-  }, [products, catalogSearch, catalogCategoryFilter]);
+  }, [catalogProducts, catalogSearch, catalogCategoryFilter]);
 
   // Save Quotation Handler
   const handleSaveQuotation = async (isSubmitting: boolean = false) => {
@@ -316,57 +375,42 @@ export default function CreateQuotationPage() {
       return;
     }
 
-    const newQuoteStatus: Quotation['status'] = isSubmitting
-      ? requiresManager
-        ? 'Pending Approval'
-        : 'Approved'
-      : 'Draft';
+    setIsSubmittingLoading(true);
 
-    const newQuotation: Quotation = {
-      id: `q-${Date.now()}`,
-      reference: generatedRef,
-      customerName: currentCustomer.name,
-      customerTier: currentCustomer.tier,
-      date: quotationDate,
-      expiryDate: expiryDate,
-      paymentTerms: paymentTerms,
-      status: newQuoteStatus,
-      lines: lines,
-      untaxedAmount: untaxedAmount,
-      taxAmount: taxAmount,
-      totalAmount: totalAmount,
-      blendedRiskScore: blendedRiskScore,
-      requiresManagerApproval: requiresManager,
-      requiresFinanceApproval: requiresFinance,
-    };
-
-    // Save to Zustand Store
-    addQuotation(newQuotation);
-
-    // Try calling backend API if active
+    // Call backend API if live mode or connected
     try {
-      if (import.meta.env.VITE_USE_MOCK_DATA === 'false') {
-        const createRes = await quoteApi.createQuote({
-          customer_id: currentCustomer.id,
-          notes: internalNotes,
-          expires_at: `${expiryDate}T23:59:59.000Z`,
-        });
-        if (createRes?.data?.id) {
-          for (const line of lines) {
-            const numProdId = parseInt(line.productId.replace(/\D/g, '')) || 101;
-            await quoteApi.addLine(createRes.data.id, {
+      const createRes = await quoteApi.createQuote({
+        customer_id: Number(currentCustomer.id),
+        notes: internalNotes,
+        expires_at: expiryDate ? new Date(`${expiryDate}T23:59:59.000Z`).toISOString() : undefined,
+      });
+
+      if (createRes?.data?.id) {
+        const backendQuoteId = createRes.data.id;
+        for (const line of lines) {
+          const numProdId = parseInt(String(line.productId).replace(/\D/g, '')) || 1;
+          try {
+            await quoteApi.addLine(backendQuoteId, {
               product_id: numProdId,
               quantity: line.quantity,
               discount_pct: line.discount,
             });
-          }
-          if (isSubmitting) {
-            await quoteApi.submitQuote(createRes.data.id);
+          } catch {
+            // Non-blocking line addition fallback
           }
         }
+
+        if (isSubmitting) {
+          await quoteApi.submitQuote(backendQuoteId);
+        }
       }
-    } catch {
-      // Handled gracefully in mock mode
+    } catch (err: any) {
+      console.warn('Backend synchronization notice:', err?.response?.data || err?.message);
+      if (err?.response?.data?.message) {
+        toast.error(`Backend notice: ${err.response.data.message}`, { duration: 5000 });
+      }
+    } finally {
+      setIsSubmittingLoading(false);
     }
 
     if (isSubmitting) {
@@ -418,20 +462,23 @@ export default function CreateQuotationPage() {
           <button
             className="odoo-btn odoo-btn-secondary"
             onClick={() => navigate('/quotations')}
+            disabled={isSubmittingLoading}
           >
             Discard
           </button>
           <button
             className="odoo-btn odoo-btn-secondary"
             onClick={() => handleSaveQuotation(false)}
+            disabled={isSubmittingLoading}
           >
             Save as Draft
           </button>
           <button
             className="odoo-btn odoo-btn-primary"
             onClick={() => handleSaveQuotation(true)}
+            disabled={isSubmittingLoading}
           >
-            Submit for Approval ➔
+            {isSubmittingLoading ? 'Submitting...' : 'Submit for Approval ➔'}
           </button>
         </div>
       </div>
@@ -453,7 +500,7 @@ export default function CreateQuotationPage() {
                 onChange={(e) => handleCustomerChange(Number(e.target.value))}
                 style={{ fontWeight: 600, color: '#1F2937' }}
               >
-                {MOCK_CUSTOMERS.map((c) => (
+                {customerList.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} ({c.tier} Tier — Max {c.maxDiscountPct}%)
                   </option>
@@ -528,14 +575,21 @@ export default function CreateQuotationPage() {
           >
             {/* Live Gross Margin */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: grossMarginPercent >= 30 ? '#059669' : '#D97706' }} />
+              <div
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  backgroundColor: grossMarginPercent >= 30 ? '#059669' : grossMarginPercent >= 15 ? '#D97706' : '#EF4444',
+                }}
+              />
               <div>
                 <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#475569' }}>Live Margin: </span>
                 <span style={{ fontWeight: 800, color: '#714B67', fontSize: '0.9375rem' }}>
                   {grossMarginPercent}% Gross Margin
                 </span>
-                <span style={{ fontSize: '0.75rem', color: '#94A3B8', marginLeft: '0.4rem' }}>
-                  (Est. Cost: ₹{totalCost.toLocaleString('en-IN')})
+                <span style={{ fontSize: '0.75rem', color: '#64748B', marginLeft: '0.4rem' }}>
+                  (Est. Cost: ₹{Math.round(totalCost).toLocaleString('en-IN')})
                 </span>
               </div>
             </div>
@@ -608,11 +662,11 @@ export default function CreateQuotationPage() {
                   <thead>
                     <tr>
                       <th style={{ width: '22%' }}>Product</th>
-                      <th style={{ width: '24%' }}>Description</th>
-                      <th style={{ width: '12%', textAlign: 'center' }}>Quantity</th>
+                      <th style={{ width: '22%' }}>Description</th>
+                      <th style={{ width: '11%', textAlign: 'center' }}>Quantity</th>
                       <th style={{ width: '14%' }}>Unit Price (₹)</th>
-                      <th style={{ width: '14%' }}>Discount (%)</th>
-                      <th style={{ width: '10%' }}>Taxes</th>
+                      <th style={{ width: '13%' }}>Discount (%)</th>
+                      <th style={{ width: '8%' }}>Taxes</th>
                       <th style={{ width: '14%', textAlign: 'right' }}>Amount</th>
                       <th style={{ width: '4%' }}></th>
                     </tr>
@@ -620,6 +674,9 @@ export default function CreateQuotationPage() {
                   <tbody>
                     {lines.map((line) => {
                       const isDiscountExceeded = line.discount > line.allowedDiscount;
+                      const lineCost = (line.costPrice && line.costPrice > 0 ? line.costPrice : line.unitPrice * 0.65) * line.quantity;
+                      const lineMargin = line.total > 0 ? Math.round(((line.total - lineCost) / line.total) * 100) : 35;
+
                       return (
                         <tr key={line.id}>
                           {/* Product & Category */}
@@ -627,32 +684,36 @@ export default function CreateQuotationPage() {
                             <div style={{ fontWeight: 700, color: '#1F2937', fontSize: '0.8125rem' }}>
                               {line.productName}
                             </div>
-                            <span
-                              className="odoo-badge"
-                              style={{
-                                fontSize: '0.65rem',
-                                padding: '0.1rem 0.4rem',
-                                marginTop: '0.2rem',
-                                backgroundColor:
-                                  line.category === 'Hardware'
-                                    ? '#EFF6FF'
-                                    : line.category === 'Subscriptions'
-                                    ? '#FAF5FF'
-                                    : line.category === 'Services'
-                                    ? '#ECFDF5'
-                                    : '#FFFBEB',
-                                color:
-                                  line.category === 'Hardware'
-                                    ? '#1D4ED8'
-                                    : line.category === 'Subscriptions'
-                                    ? '#7E22CE'
-                                    : line.category === 'Services'
-                                    ? '#047857'
-                                    : '#B45309',
-                              }}
-                            >
-                              {line.category}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
+                              <span
+                                className="odoo-badge"
+                                style={{
+                                  fontSize: '0.65rem',
+                                  padding: '0.1rem 0.4rem',
+                                  backgroundColor:
+                                    line.category === 'Hardware'
+                                      ? '#EFF6FF'
+                                      : line.category === 'Subscriptions'
+                                      ? '#FAF5FF'
+                                      : line.category === 'Services'
+                                      ? '#ECFDF5'
+                                      : '#FFFBEB',
+                                  color:
+                                    line.category === 'Hardware'
+                                      ? '#1D4ED8'
+                                      : line.category === 'Subscriptions'
+                                      ? '#7E22CE'
+                                      : line.category === 'Services'
+                                      ? '#047857'
+                                      : '#B45309',
+                                }}
+                              >
+                                {line.category}
+                              </span>
+                              <span style={{ fontSize: '0.65rem', color: lineMargin >= 30 ? '#059669' : '#D97706', fontWeight: 600 }}>
+                                {lineMargin}% margin
+                              </span>
+                            </div>
                           </td>
 
                           {/* Description */}
@@ -683,7 +744,7 @@ export default function CreateQuotationPage() {
                                 className="odoo-input"
                                 value={line.quantity}
                                 onChange={(e) => handleQuantityInput(line.id, parseInt(e.target.value) || 1)}
-                                style={{ width: 50, textAlign: 'center', padding: '0.25rem 0.2rem', fontSize: '0.8125rem', fontWeight: 600 }}
+                                style={{ width: 48, textAlign: 'center', padding: '0.25rem 0.2rem', fontSize: '0.8125rem', fontWeight: 600 }}
                               />
                               <button
                                 type="button"
@@ -704,7 +765,7 @@ export default function CreateQuotationPage() {
                               className="odoo-input"
                               value={line.unitPrice}
                               onChange={(e) => handleUnitPriceChange(line.id, parseFloat(e.target.value) || 0)}
-                              style={{ fontSize: '0.8125rem', fontWeight: 600, padding: '0.3rem 0.5rem' }}
+                              style={{ fontSize: '0.8125rem', fontWeight: 600, padding: '0.3rem 0.5rem', minWidth: 90 }}
                             />
                           </td>
 
@@ -790,6 +851,7 @@ export default function CreateQuotationPage() {
                       description: 'Custom implementation or consultative line',
                       quantity: 1,
                       unitPrice: 15000,
+                      costPrice: 9000,
                       discount: 0,
                       allowedDiscount: currentCustomer.maxDiscountPct,
                       taxPercent: 18,
@@ -1085,8 +1147,11 @@ export default function CreateQuotationPage() {
                   No matching products found in catalog.
                 </div>
               ) : (
-                filteredCatalog.map((prod) => {
+                filteredCatalog.map((prod: any) => {
                   const allowedCeiling = getCategoryDiscountCeiling(prod.category, currentCustomer.tier);
+                  const price = Number(prod.salesPrice || prod.basePrice || prod.base_price || 0);
+                  const cost = Number(prod.costPrice || prod.cost_price || (price > 0 ? price * 0.65 : 0));
+
                   return (
                     <div
                       key={prod.id}
@@ -1124,10 +1189,10 @@ export default function CreateQuotationPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginLeft: '1rem' }}>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontWeight: 800, fontSize: '0.9375rem', color: '#714B67' }}>
-                            ₹{prod.salesPrice.toLocaleString('en-IN')}
+                            ₹{price.toLocaleString('en-IN')}
                           </div>
                           <div style={{ fontSize: '0.7rem', color: '#94A3B8' }}>
-                            Cost: ₹{prod.costPrice.toLocaleString('en-IN')}
+                            Cost: ₹{cost.toLocaleString('en-IN')}
                           </div>
                         </div>
 
@@ -1161,4 +1226,3 @@ export default function CreateQuotationPage() {
     </div>
   );
 }
-

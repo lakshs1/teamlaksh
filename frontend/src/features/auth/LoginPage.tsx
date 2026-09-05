@@ -5,6 +5,8 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../stores/authStore';
+import { authApi } from '../../services/apiServices';
+import { mapAuthUser } from '../../services/dataMappers';
 import styles from './LoginPage.module.css';
 
 export default function LoginPage() {
@@ -34,28 +36,41 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      // TODO: Replace with real API call
-      const mockUser = {
-        id: 'user_' + Math.random().toString(36).substring(2, 9),
-        name: email.split('@')[0],
-        email,
-        role: email.includes('admin') ? 'ADMIN' as const : email.includes('manager') ? 'MANAGER' as const : 'USER' as const,
-        status: 'ACTIVE' as const,
-        emailVerified: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      const mockToken = 'mock_jwt_' + Date.now();
+      const res = await authApi.login({ email, password });
+      const user = mapAuthUser(res.data.user);
+      const token = res.data.token;
 
       toast.success('Logged in successfully!');
-      setAuth(mockUser, mockToken);
+      setAuth(user, token);
 
       if (redirectTo) navigate(redirectTo);
-      else if (mockUser.role === 'MANAGER') navigate('/dashboard');
-      else if (mockUser.role === 'ADMIN') navigate('/admin');
+      else if (user.role === 'MANAGER') navigate('/dashboard');
+      else if (user.role === 'ADMIN') navigate('/admin');
       else navigate('/');
     } catch (err: any) {
-      toast.error(err.message || 'Login failed');
+      const msg = err?.response?.data?.message || err.message || 'Login failed';
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async (role: string) => {
+    setIsLoading(true);
+    try {
+      const res = await authApi.demoLogin(role);
+      const user = mapAuthUser(res.data.user);
+      const token = res.data.token;
+
+      toast.success(`Logged in as ${role}!`);
+      setAuth(user, token);
+
+      if (user.role === 'MANAGER') navigate('/dashboard');
+      else if (user.role === 'ADMIN') navigate('/admin');
+      else navigate('/');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err.message || 'Demo login failed';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }

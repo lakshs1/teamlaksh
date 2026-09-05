@@ -1,17 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import toast from 'react-hot-toast';
+import { billingApi } from '../../services/apiServices';
+import { mapInvoice } from '../../services/dataMappers';
+import type { InvoiceItem } from '../../stores/dealflowStore';
 
 export default function InvoicesListPage() {
   const navigate = useNavigate();
-  const { invoices } = useDealFlowStore();
+  const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const res = await billingApi.getInvoices();
+        const items = res.data?.items ?? res.data?.invoices ?? res.data ?? [];
+        setInvoices(items.map(mapInvoice));
+      } catch (err: any) {
+        setError(err.message || 'Failed to load invoices');
+        toast.error('Failed to load invoices');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const filteredInvoices = invoices.filter(
     (i) =>
       i.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
       i.customerName.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) return <div className="odoo-container"><div className="p-4">Loading invoices...</div></div>;
+  if (error) return <div className="odoo-container"><div className="p-4 text-red-500">Error: {error}</div></div>;
 
   return (
     <div className="odoo-container">

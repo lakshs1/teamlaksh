@@ -1,13 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import { approvalApi } from '../../services/apiServices';
+import { mapApproval } from '../../services/dataMappers';
+import type { ApprovalItem } from '../../stores/dealflowStore';
+import toast from 'react-hot-toast';
 
 export default function ApprovalsListPage() {
   const navigate = useNavigate();
-  const { approvals } = useDealFlowStore();
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const res = await approvalApi.getPendingApprovals();
+        const items = res.data?.items ?? res.data ?? [];
+        setApprovals(items.map(mapApproval));
+      } catch (err: any) {
+        setError(err.message || 'Failed to load approvals');
+        toast.error('Failed to load approvals');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const filteredApprovals = approvals.filter((a) => filter === 'All' || a.status === filter);
+
+  if (loading) return <div className="odoo-container"><div className="p-4">Loading approvals...</div></div>;
+  if (error) return <div className="odoo-container"><div className="p-4 text-red-500">Error: {error}</div></div>;
 
   return (
     <div className="odoo-container">
@@ -72,6 +97,13 @@ export default function ApprovalsListPage() {
                 </td>
               </tr>
             ))}
+            {filteredApprovals.length === 0 && (
+              <tr>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
+                  No approvals found matching the current filter.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

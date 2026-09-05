@@ -1,32 +1,71 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
+import { catalogApi } from '../../services/apiServices';
+import { mapProduct } from '../../services/dataMappers';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { products } = useDealFlowStore();
 
-  const prod = products.find((p) => p.id === id) || products[0];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState(prod.name);
-  const [sku, setSku] = useState(prod.sku);
-  const [salesPrice, setSalesPrice] = useState(prod.salesPrice.toString());
-  const [costPrice, setCostPrice] = useState(prod.costPrice.toString());
+  const [name, setName] = useState('');
+  const [sku, setSku] = useState('');
+  const [salesPrice, setSalesPrice] = useState('');
+  const [costPrice, setCostPrice] = useState('');
+  const [description, setDescription] = useState('');
   const [activeTab, setActiveTab] = useState<'general' | 'variants' | 'sales'>('general');
 
-  const handleSave = () => {
-    toast.success(`Product ${name} updated successfully!`);
-    navigate('/products');
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        setLoading(true);
+        if (!id) return;
+        const res = await catalogApi.getProductById(id);
+        const mappedProd = mapProduct(res.data);
+        setName(mappedProd.name);
+        setSku(mappedProd.sku);
+        setSalesPrice(mappedProd.salesPrice.toString());
+        setCostPrice(mappedProd.costPrice.toString());
+        setDescription(mappedProd.description);
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || err.message || 'Failed to load product details';
+        setError(msg);
+        toast.error(msg);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProduct();
+  }, [id]);
+
+  const handleSave = async () => {
+    try {
+      if (!id) return;
+      await catalogApi.updateProduct(id, {
+        name,
+        sku,
+        base_price: Number(salesPrice),
+        cost_price: Number(costPrice),
+        description,
+      });
+      toast.success(`Product ${name} updated successfully!`);
+      navigate('/products');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to update product');
+    }
   };
+
+  if (loading) return <div style={{ padding: '2rem' }}>Loading product details...</div>;
+  if (error) return <div style={{ padding: '2rem', color: 'red' }}>{error}</div>;
 
   return (
     <div className="odoo-container">
       <div className="odoo-page-header">
         <div>
-          <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 500 }}>Products</div>
-          <h1 className="odoo-page-title" style={{ color: '#714B67' }}>
+          <h1 className="odoo-page-title">
             {name}
           </h1>
         </div>
@@ -146,7 +185,8 @@ export default function ProductDetailPage() {
             <textarea
               className="odoo-input"
               rows={4}
-              defaultValue={prod.description}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
         ) : (

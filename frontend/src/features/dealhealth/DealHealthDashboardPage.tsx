@@ -1,22 +1,69 @@
+import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { useDealFlowStore } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
-
-const pieData = [
-  { name: 'Healthy', value: 24 },
-  { name: 'At Risk', value: 8 },
-  { name: 'Critical', value: 6 },
-];
+import { analyticsApi } from '../../services/apiServices';
+import { mapDealAlert } from '../../services/dataMappers';
+import type { DealHealthItem } from '../../stores/dealflowStore';
 
 const COLORS = ['#714B67', '#94A3B8', '#475569'];
 
 export default function DealHealthDashboardPage() {
-  const { dealHealthAlerts, triggerDealNudge } = useDealFlowStore();
+  const [healthData, setHealthData] = useState<any>(null);
+  const [alerts, setAlerts] = useState<DealHealthItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleNudge = (id: string, ref: string) => {
-    triggerDealNudge(id);
-    toast.success(`Automated escalation nudge sent to representative for quotation ${ref}!`);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [healthRes, alertsRes] = await Promise.all([
+          analyticsApi.getDealHealth(),
+          analyticsApi.getAlerts()
+        ]);
+        
+        setHealthData(healthRes.data || { total: 0, healthy: 0, atRisk: 0, critical: 0, riskFactors: [] });
+        
+        const mappedAlerts = (alertsRes.data?.items || alertsRes.data || []).map(mapDealAlert);
+        setAlerts(mappedAlerts);
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to load deal health data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const handleNudge = async (id: string, ref: string) => {
+    try {
+      await analyticsApi.escalateAlert(id, 'Nudge sent');
+      toast.success(`Automated escalation nudge sent to representative for quotation ${ref}!`);
+      // Update local state to reflect the triggered action
+      setAlerts(prev => prev.map(a => a.id === id ? { ...a, triggeredAction: 'Nudge sent' } : a));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to send nudge');
+    }
   };
+
+  if (loading) {
+    return <div className="p-8 text-center">Loading dashboard...</div>;
+  }
+
+  const pieData = [
+    { name: 'Healthy', value: healthData?.healthy || 0 },
+    { name: 'At Risk', value: healthData?.atRisk || 0 },
+    { name: 'Critical', value: healthData?.critical || 0 },
+  ];
+
+  const totalDeals = healthData?.total || (pieData[0].value + pieData[1].value + pieData[2].value);
+  
+  const riskFactors = healthData?.riskFactors || [
+    { factor: 'Delayed approvals', count: 6, width: '80%' },
+    { factor: 'Customer indecision', count: 4, width: '55%' },
+    { factor: 'Pricing concerns', count: 3, width: '40%' },
+    { factor: 'Competitive pressure', count: 3, width: '40%' },
+    { factor: 'Missing documents', count: 2, width: '25%' },
+  ];
 
   return (
     <div className="odoo-container">
@@ -34,22 +81,22 @@ export default function DealHealthDashboardPage() {
       {/* Top 4 KPI Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
         <div className="odoo-card">
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1F2937' }}>38</div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1F2937' }}>{totalDeals}</div>
           <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 600 }}>Total Deals</div>
         </div>
 
         <div className="odoo-card">
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#714B67' }}>24</div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#714B67' }}>{pieData[0].value}</div>
           <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 600 }}>Healthy</div>
         </div>
 
         <div className="odoo-card">
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#475569' }}>8</div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#475569' }}>{pieData[1].value}</div>
           <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 600 }}>At Risk</div>
         </div>
 
         <div className="odoo-card">
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1F2937' }}>6</div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1F2937' }}>{pieData[2].value}</div>
           <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 600 }}>Critical</div>
         </div>
       </div>
@@ -79,20 +126,14 @@ export default function DealHealthDashboardPage() {
             Top Risk Factors
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '0.8125rem' }}>
-            {[
-              { factor: 'Delayed approvals', count: 6, width: '80%' },
-              { factor: 'Customer indecision', count: 4, width: '55%' },
-              { factor: 'Pricing concerns', count: 3, width: '40%' },
-              { factor: 'Competitive pressure', count: 3, width: '40%' },
-              { factor: 'Missing documents', count: 2, width: '25%' },
-            ].map((r, idx) => (
+            {riskFactors.map((r: any, idx: number) => (
               <div key={idx}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                   <span style={{ fontWeight: 600, color: '#334155' }}>{r.factor}</span>
                   <span style={{ fontWeight: 700 }}>{r.count}</span>
                 </div>
                 <div style={{ height: 8, background: '#F1F5F9', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: r.width, background: '#714B67', borderRadius: 4 }} />
+                  <div style={{ height: '100%', width: r.width || '50%', background: '#714B67', borderRadius: 4 }} />
                 </div>
               </div>
             ))}
@@ -118,7 +159,7 @@ export default function DealHealthDashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {dealHealthAlerts.map((alert) => (
+            {alerts.map((alert) => (
               <tr key={alert.id}>
                 <td style={{ fontWeight: 700, color: '#714B67' }}>{alert.quotationRef}</td>
                 <td style={{ fontWeight: 600 }}>{alert.customerName}</td>
@@ -145,6 +186,13 @@ export default function DealHealthDashboardPage() {
                 </td>
               </tr>
             ))}
+            {alerts.length === 0 && (
+              <tr>
+                <td colSpan={7} className="text-center text-muted" style={{ padding: '2rem' }}>
+                  No active anomaly alerts.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

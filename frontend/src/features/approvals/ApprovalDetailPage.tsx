@@ -1,23 +1,75 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import { approvalApi, quoteApi } from '../../services/apiServices';
+import { mapApproval } from '../../services/dataMappers';
+import type { ApprovalItem } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
 
 export default function ApprovalDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { approvals, approveRequest, rejectRequest } = useDealFlowStore();
+  const [item, setItem] = useState<ApprovalItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const item = approvals.find((a) => a.id === id) || approvals[0];
-
-  const handleApprove = () => {
-    approveRequest(item.id, 'Approved via Odoo Sales Ops workflow');
-    toast.success(`Approval ${item.reference} granted!`);
+  const fetchDetails = async () => {
+    if (!id) return;
+    try {
+      setLoading(true);
+      const quoteRes = await quoteApi.getQuoteDetails(id);
+      const logsRes = await approvalApi.getAuditLogs(id);
+      
+      const quoteData = quoteRes.data || {};
+      const logsData = logsRes.data?.items ?? logsRes.data ?? [];
+      
+      setItem(mapApproval({ ...quoteData, approvalLogs: logsData }));
+    } catch (err: any) {
+      setError(err.message || 'Failed to load approval details');
+      toast.error('Failed to load approval details');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReject = () => {
-    rejectRequest(item.id, 'Discount exceeds maximum policy limit');
-    toast.error(`Approval ${item.reference} rejected`);
+  useEffect(() => {
+    fetchDetails();
+  }, [id]);
+
+  const handleApprove = async () => {
+    if (!id) return;
+    try {
+      await approvalApi.approveQuote(id, 'Approved via Odoo Sales Ops workflow');
+      toast.success(`Approval granted!`);
+      navigate('/approvals');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Action failed');
+    }
   };
+
+  const handleReject = async () => {
+    if (!id) return;
+    try {
+      await approvalApi.rejectQuote(id, 'Discount exceeds maximum policy limit');
+      toast.error(`Approval rejected`);
+      navigate('/approvals');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Action failed');
+    }
+  };
+
+  const handleRevise = async () => {
+    if (!id) return;
+    try {
+      await approvalApi.reviseQuote(id, 'Needs revision on discount structure');
+      toast.success(`Requested revision`);
+      navigate('/approvals');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Action failed');
+    }
+  };
+
+  if (loading) return <div className="odoo-container"><div className="p-4">Loading details...</div></div>;
+  if (error || !item) return <div className="odoo-container"><div className="p-4 text-red-500">Error: {error || 'Not found'}</div></div>;
 
   return (
     <div className="odoo-container">
@@ -36,6 +88,9 @@ export default function ApprovalDetailPage() {
               </button>
               <button className="odoo-btn odoo-btn-danger" onClick={handleReject}>
                 Reject
+              </button>
+              <button className="odoo-btn odoo-btn-secondary" onClick={handleRevise}>
+                Revise
               </button>
             </>
           )}
@@ -61,9 +116,9 @@ export default function ApprovalDetailPage() {
               <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Related Document</div>
               <div
                 style={{ fontWeight: 700, color: '#714B67', cursor: 'pointer' }}
-                onClick={() => navigate('/quotations/q-1')}
+                onClick={() => navigate(`/quotations/${item.quotationId}`)}
               >
-                Q/00024
+                {item.quotationId ? `Q/${String(item.quotationId).padStart(5, '0')}` : 'Unknown'}
               </div>
             </div>
           </div>
@@ -121,6 +176,9 @@ export default function ApprovalDetailPage() {
                 {log.note && <div style={{ marginTop: '0.2rem', color: '#475569' }}>"{log.note}"</div>}
               </div>
             ))}
+            {item.auditTrail.length === 0 && (
+              <div style={{ color: '#64748B', fontSize: '0.75rem' }}>No audit logs available.</div>
+            )}
           </div>
         </div>
       </div>

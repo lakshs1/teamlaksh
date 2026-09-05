@@ -16,9 +16,9 @@ describe('CreateQuotationPage Component', () => {
     expect(screen.getByRole('button', { name: /Save as Draft/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Submit for Approval/i })).toBeInTheDocument();
 
-    // Check customer dropdown & default product line
-    expect(screen.getByText(/Customer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Titan Blade Server Node X8/i)).toBeInTheDocument();
+    // Check customer dropdown & add product button
+    expect(screen.getAllByText(/Customer/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Add a product/i)).toBeInTheDocument();
 
     // Check live margin indicator bar
     expect(screen.getByText(/Live Margin:/i)).toBeInTheDocument();
@@ -40,7 +40,7 @@ describe('CreateQuotationPage Component', () => {
 
     fireEvent.click(addButtons[0]);
     // The line should be added
-    expect(screen.getByText(/Order Lines \(2\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Order Lines \(1\)/i)).toBeInTheDocument();
   });
 
   it('allows switching between Order Lines and Other Information tabs', () => {

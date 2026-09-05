@@ -1,0 +1,270 @@
+/**
+ * Data Mappers — Transform backend API responses into frontend interface shapes.
+ *
+ * The backend (Drizzle ORM) returns camelCase fields, but some names differ
+ * from the frontend Zustand store interfaces. These mappers bridge the gap.
+ */
+
+import type {
+  Quotation,
+  QuotationLine,
+  ApprovalItem,
+  FulfillmentItem,
+  WarehouseSplit,
+  SubscriptionItem,
+  InvoiceItem,
+  DealHealthItem,
+  ProductItem,
+} from '../stores/dealflowStore';
+
+// ─── Helpers ────────────────────────────────────────────────────
+function str(v: any): string {
+  return v != null ? String(v) : '';
+}
+function num(v: any): number {
+  const n = parseFloat(v);
+  return isNaN(n) ? 0 : n;
+}
+function dateStr(v: any): string {
+  if (!v) return new Date().toISOString().split('T')[0];
+  return new Date(v).toISOString().split('T')[0];
+}
+
+// ─── Quote Line ─────────────────────────────────────────────────
+export function mapQuoteLine(line: any): QuotationLine {
+  return {
+    id: str(line.id),
+    productId: str(line.productId),
+    productName: line.product?.name || line.productName || 'Unknown Product',
+    category: line.product?.category || line.category || '',
+    description: line.product?.description || line.description || '',
+    quantity: num(line.quantity),
+    unitPrice: num(line.unitPrice || line.product?.basePrice),
+    discount: num(line.discountPct),
+    allowedDiscount: num(line.allowedDiscountPct),
+    taxPercent: num(line.taxPct || 0),
+    total: num(line.lineTotal),
+  };
+}
+
+// ─── Quote / Quotation ──────────────────────────────────────────
+const STATUS_MAP: Record<string, Quotation['status']> = {
+  draft: 'Draft',
+  submitted: 'Sent',
+  pending_manager: 'Pending Approval',
+  pending_finance: 'Pending Approval',
+  approved: 'Approved',
+  confirmed: 'Confirmed',
+  fulfillment: 'Confirmed',
+  rejected: 'Expired',
+  revision: 'Draft',
+};
+
+export function mapQuote(q: any): Quotation {
+  const lines = (q.lines || []).map(mapQuoteLine);
+  const status = STATUS_MAP[q.status] || 'Draft';
+  const approvalRoute = q.approvalRoute || 'auto';
+
+  return {
+    id: str(q.id),
+    reference: q.quoteNumber || `QT-${q.id}`,
+    customerName: q.customer?.name || q.customerName || 'Unknown',
+    customerTier: q.customer?.tier?.name || q.customerTier || 'Bronze',
+    date: dateStr(q.createdAt),
+    expiryDate: dateStr(q.expiresAt),
+    paymentTerms: q.paymentTerms || 'Net 30',
+    status,
+    lines,
+    untaxedAmount: num(q.subtotal),
+    taxAmount: num(q.totalTax),
+    totalAmount: num(q.grandTotal),
+    blendedRiskScore: num(q.blendedRiskScore),
+    requiresManagerApproval: approvalRoute === 'manager' || approvalRoute === 'manager_finance',
+    requiresFinanceApproval: approvalRoute === 'manager_finance',
+  };
+}
+
+// ─── Approval Item ──────────────────────────────────────────────
+export function mapApproval(q: any): ApprovalItem {
+  const auditTrail = (q.approvalLogs || q.auditTrail || []).map((log: any) => ({
+    step: log.level || log.step || 'Review',
+    user: log.reviewer?.name || log.reviewerName || log.user || 'Reviewer',
+    status: log.action === 'approved' ? 'Approved' : log.action === 'rejected' ? 'Rejected' : log.action || log.status || 'Pending',
+    timestamp: log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : log.timestamp || '',
+    note: log.reason || log.note || undefined,
+  }));
+
+  return {
+    id: str(q.id),
+    reference: `APP/${str(q.id).padStart(5, '0')}`,
+    quotationId: str(q.id),
+    customerName: q.customer?.name || q.customerName || 'Unknown',
+    requestType: 'Discount Approval',
+    amount: num(q.grandTotal),
+    requestedBy: q.rep?.name || q.requestedBy || 'Sales Rep',
+    requestedDate: dateStr(q.createdAt),
+    status: q.status === 'approved' ? 'Approved' : q.status === 'rejected' ? 'Rejected' : 'Pending',
+    blendedRiskScore: num(q.blendedRiskScore),
+    reason: q.notes || '',
+    auditTrail,
+  };
+}
+
+// ─── Fulfillment ────────────────────────────────────────────────
+export function mapFulfillment(data: any): FulfillmentItem {
+  const splits: WarehouseSplit[] = (data.splits || []).map((s: any) => ({
+    warehouseName: s.warehouse?.name || s.warehouseName || `Warehouse ${s.warehouseId}`,
+    quantityFulfilled: num(s.quantityAllocated || s.quantity),
+    stockAvailable: num(s.stockAvailable || s.quantityOnHand),
+    estimatedCost: num(s.estimatedCost || 0),
+    shipmentCount: 1,
+  }));
+
+  return {
+    id: str(data.quoteId || data.id),
+    reference: `SO/${str(data.quoteId || data.id).padStart(5, '0')}`,
+    quotationReference: data.quote?.quoteNumber || data.quotationReference || '',
+    customerName: data.quote?.customer?.name || data.customerName || 'Unknown',
+    scheduledDate: dateStr(data.createdAt),
+    status: data.status || 'Ready',
+    responsible: data.performedBy || data.responsible || 'Operations',
+    lines: (data.lines || []).map((l: any) => ({
+      productName: l.product?.name || l.productName || '',
+      description: l.description || '',
+      demand: num(l.quantity),
+      done: num(l.quantityFulfilled || 0),
+      unit: l.product?.unit || l.unit || 'Units',
+    })),
+    splits,
+    backorderPrompt: (data.backordered || []).length > 0,
+  };
+}
+
+// ─── Subscription ───────────────────────────────────────────────
+const INTERVAL_MAP: Record<string, SubscriptionItem['billingFrequency']> = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  yearly: 'Yearly',
+};
+
+export function mapSubscription(sub: any): SubscriptionItem {
+  return {
+    id: str(sub.id),
+    reference: `SUB/${str(sub.id).padStart(5, '0')}`,
+    customerName: sub.customer?.name || sub.customerName || 'Unknown',
+    planName: sub.product?.name || sub.planName || 'Subscription',
+    startDate: dateStr(sub.startsAt || sub.startDate),
+    nextBillingDate: dateStr(sub.currentPeriodEnd || sub.nextBillingDate),
+    billingFrequency: INTERVAL_MAP[sub.interval] || 'Monthly',
+    status: sub.status === 'active' ? 'Active'
+      : sub.status === 'paused' ? 'Paused'
+      : sub.status === 'cancelled' ? 'Cancelled'
+      : 'Expired',
+    recurringLines: [{
+      productName: sub.product?.name || 'Product',
+      description: sub.product?.description || '',
+      quantity: num(sub.quantity),
+      unitPrice: num(sub.unitPrice),
+      amount: num(sub.quantity) * num(sub.unitPrice),
+    }],
+  };
+}
+
+// ─── Invoice ────────────────────────────────────────────────────
+export function mapInvoice(inv: any): InvoiceItem {
+  const status = inv.status === 'paid' ? 'Paid'
+    : inv.status === 'posted' || inv.status === 'sent' ? 'Posted'
+    : inv.status === 'overdue' ? 'Overdue'
+    : 'Draft';
+
+  return {
+    id: str(inv.id),
+    reference: inv.invoiceNumber || `INV/${str(inv.id).padStart(5, '0')}`,
+    customerName: inv.customer?.name || inv.customerName || 'Unknown',
+    invoiceDate: dateStr(inv.createdAt),
+    dueDate: dateStr(inv.dueDate),
+    amount: num(inv.total),
+    status,
+    paymentTerms: inv.paymentTerms || 'Net 30',
+    lines: (inv.lines || []).map((l: any) => ({
+      productName: l.product?.name || l.productName || '',
+      description: l.description || '',
+      quantity: num(l.quantity),
+      unitPrice: num(l.unitPrice),
+      taxes: num(l.tax),
+      amount: num(l.total || l.lineTotal),
+    })),
+  };
+}
+
+// ─── Deal Health Alert ──────────────────────────────────────────
+const RISK_MAP: Record<string, DealHealthItem['riskCategory']> = {
+  stalled: 'Stalled Deal',
+  discount_anomaly: 'Discount Anomaly',
+  delivery_risk: 'Delivery Slippage',
+};
+const SEVERITY_MAP: Record<string, DealHealthItem['severity']> = {
+  info: 'Low',
+  warning: 'Medium',
+  critical: 'Critical',
+  high: 'High',
+};
+
+export function mapDealAlert(alert: any): DealHealthItem {
+  return {
+    id: str(alert.id),
+    quotationRef: alert.quote?.quoteNumber || `QT-${alert.quoteId}`,
+    customerName: alert.quote?.customer?.name || alert.customerName || 'Unknown',
+    repName: alert.quote?.rep?.name || alert.repName || 'Rep',
+    amount: num(alert.quote?.grandTotal || alert.amount),
+    daysInactive: num(alert.daysInactive || 0),
+    riskCategory: RISK_MAP[alert.type] || 'Stalled Deal',
+    severity: SEVERITY_MAP[alert.severity] || 'Medium',
+    description: alert.message || alert.description || '',
+    triggeredAction: alert.isResolved ? 'Resolved' : undefined,
+  };
+}
+
+// ─── Product ────────────────────────────────────────────────────
+export function mapProduct(p: any): ProductItem {
+  return {
+    id: str(p.id),
+    name: p.name || '',
+    sku: p.sku || `SKU-${p.id}`,
+    category: p.category?.name || p.categoryName || 'Uncategorized',
+    salesPrice: num(p.basePrice),
+    costPrice: num(p.costPrice),
+    status: p.isActive === false ? 'Archived' : 'Active',
+    description: p.description || '',
+    canBeSold: true,
+    canBePurchased: true,
+  };
+}
+
+// ─── Auth User Mapper ───────────────────────────────────────────
+export function mapAuthUser(u: any) {
+  return {
+    id: str(u.id),
+    name: u.name || '',
+    email: u.email || '',
+    avatar: u.avatar_url || u.avatarUrl || undefined,
+    phone: u.phone || undefined,
+    role: mapRole(u.role),
+    status: (u.isActive === false ? 'BANNED' : 'ACTIVE') as 'ACTIVE' | 'BANNED',
+    emailVerified: true,
+    createdAt: u.createdAt || new Date().toISOString(),
+  };
+}
+
+const ROLE_BACKEND_TO_FRONTEND: Record<string, string> = {
+  admin: 'ADMIN',
+  manager: 'MANAGER',
+  rep: 'USER',
+  finance: 'MANAGER',
+  operations: 'USER',
+};
+
+export function mapRole(backendRole: string): 'USER' | 'MANAGER' | 'ADMIN' {
+  return (ROLE_BACKEND_TO_FRONTEND[backendRole] || 'USER') as 'USER' | 'MANAGER' | 'ADMIN';
+}
+

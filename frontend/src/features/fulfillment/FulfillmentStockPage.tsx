@@ -1,18 +1,85 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
+import { quoteApi, fulfillmentApi } from '../../services/apiServices';
+import { mapFulfillment } from '../../services/dataMappers';
+import type { FulfillmentItem } from '../../stores/dealflowStore';
 
 export default function FulfillmentStockPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { fulfillments, validateFulfillment } = useDealFlowStore();
+  const [item, setItem] = useState<FulfillmentItem | null>(null);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [warehouseStocks, setWarehouseStocks] = useState<Record<string, any>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
 
-  const item = fulfillments.find((f) => f.id === id) || fulfillments[0];
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!id) return;
+      try {
+        setLoading(true);
+        const [resQuote, resSplit, resWarehouses] = await Promise.all([
+          quoteApi.getQuoteDetails(id),
+          fulfillmentApi.getSplit(id),
+          fulfillmentApi.getWarehouses()
+        ]);
 
-  const handleValidatePicking = () => {
-    validateFulfillment(item.id);
-    toast.success('Picking confirmed & stock dispatch updated!');
+        const quoteData = resQuote.data;
+        const splitData = resSplit.data;
+        
+        setItem(mapFulfillment({
+          id: id,
+          quoteId: id,
+          quote: quoteData,
+          quotationReference: quoteData.quoteNumber,
+          customerName: quoteData.customer?.name,
+          createdAt: quoteData.createdAt,
+          lines: quoteData.lines,
+          splits: splitData.splits,
+          backordered: splitData.backordered
+        }));
+
+        const whData = resWarehouses.data?.warehouses ?? resWarehouses.data ?? [];
+        setWarehouses(whData);
+
+        const stockPromises = whData.map((wh: any) => 
+          fulfillmentApi.getWarehouseStock(wh.id).then(res => ({ id: wh.id, stock: res.data?.stock ?? res.data ?? [] }))
+        );
+        const stockResults = await Promise.all(stockPromises);
+        const stocksMap: Record<string, any> = {};
+        stockResults.forEach(sr => {
+          stocksMap[sr.id] = sr.stock;
+        });
+        setWarehouseStocks(stocksMap);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load details');
+        toast.error('Failed to load fulfillment data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [id]);
+
+  const handleValidatePicking = async () => {
+    if (!id) return;
+    try {
+      setValidating(true);
+      await fulfillmentApi.acceptSplit(id);
+      toast.success('Picking confirmed & stock dispatch updated!');
+      navigate(`/fulfillment`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Validation failed');
+    } finally {
+      setValidating(false);
+    }
   };
+
+  if (loading) return <div className="odoo-container"><div style={{ padding: '2rem', textAlign: 'center' }}>Loading stock details...</div></div>;
+  if (error) return <div className="odoo-container"><div style={{ padding: '2rem', textAlign: 'center', color: 'red' }}>{error}</div></div>;
+  if (!item) return <div className="odoo-container"><div style={{ padding: '2rem', textAlign: 'center' }}>Not found</div></div>;
 
   return (
     <div className="odoo-container">
@@ -24,8 +91,8 @@ export default function FulfillmentStockPage() {
           </h1>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="odoo-btn odoo-btn-primary" onClick={handleValidatePicking}>
-            Validate Picking
+          <button className="odoo-btn odoo-btn-primary" onClick={handleValidatePicking} disabled={validating}>
+            {validating ? 'Validating...' : 'Validate Picking'}
           </button>
           <button className="odoo-btn odoo-btn-secondary">Print Picking List</button>
           <button className="odoo-btn odoo-btn-secondary" onClick={() => navigate(`/fulfillment/${item.id}`)}>
@@ -83,20 +150,26 @@ export default function FulfillmentStockPage() {
             </tr>
           </thead>
           <tbody>
-            {item.lines.map((line, idx) => (
-              <tr key={idx}>
-                <td style={{ fontWeight: 600 }}>{line.productName}</td>
-                <td>{line.description}</td>
-                <td>{line.demand}</td>
-                <td style={{ fontWeight: 700, color: '#714B67' }}>{line.done}</td>
-                <td>{line.unit}</td>
-                <td>
-                  <span className="odoo-badge">
-                    {idx % 2 === 0 ? 'Main Warehouse (7)' : 'East Depot (3)'}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {item.lines.map((line, idx) => {
+              const allocationWarehouse = item.splits && item.splits.length > 0 
+                ? item.splits[idx % item.splits.length].warehouseName 
+                : (idx % 2 === 0 ? 'Main Warehouse (7)' : 'East Depot (3)');
+              
+              return (
+                <tr key={idx}>
+                  <td style={{ fontWeight: 600 }}>{line.productName}</td>
+                  <td>{line.description}</td>
+                  <td>{line.demand}</td>
+                  <td style={{ fontWeight: 700, color: '#714B67' }}>{line.done}</td>
+                  <td>{line.unit}</td>
+                  <td>
+                    <span className="odoo-badge">
+                      {allocationWarehouse}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

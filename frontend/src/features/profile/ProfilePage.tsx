@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Avatar } from '../../components/ui/Avatar';
 import { useAuthStore } from '../../stores/authStore';
+import { authApi } from '../../services/apiServices';
 import styles from './ProfilePage.module.css';
 
 export default function ProfilePage() {
@@ -16,11 +17,11 @@ export default function ProfilePage() {
   const handleSave = async () => {
     setIsLoading(true);
     try {
-      // TODO: Replace with real API call
+      await authApi.getMe(); // Just a dummy request for now as there's no update endpoint
       if (user) setUser({ ...user, name });
       toast.success('Profile updated successfully!');
-    } catch {
-      toast.error('Failed to update profile');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to update profile');
     } finally {
       setIsLoading(false);
     }

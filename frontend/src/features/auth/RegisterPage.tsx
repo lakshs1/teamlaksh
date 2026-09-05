@@ -6,6 +6,8 @@ import { Select } from '../../components/ui/Select';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { useAuthStore } from '../../stores/authStore';
+import { authApi } from '../../services/apiServices';
+import { mapAuthUser } from '../../services/dataMappers';
 import styles from './RegisterPage.module.css';
 
 export default function RegisterPage() {
@@ -15,7 +17,7 @@ export default function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('USER');
+  const [role, setRole] = useState('rep');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -36,26 +38,19 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      // TODO: Replace with real API call
-      const mockUser = {
-        id: 'user_' + Math.random().toString(36).substring(2, 9),
-        name,
-        email,
-        role: role as 'USER' | 'MANAGER' | 'ADMIN',
-        status: 'ACTIVE' as const,
-        emailVerified: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      const res = await authApi.register({ name, email, password, role });
+      const user = mapAuthUser(res.data.user);
+      const token = res.data.token;
 
       toast.success('Account created successfully!');
-      setAuth(mockUser, 'mock_jwt_' + Date.now());
+      setAuth(user, token);
 
-      if (role === 'MANAGER') navigate('/dashboard');
-      else if (role === 'ADMIN') navigate('/admin');
+      if (user.role === 'MANAGER') navigate('/dashboard');
+      else if (user.role === 'ADMIN') navigate('/admin');
       else navigate('/');
     } catch (err: any) {
-      toast.error(err.message || 'Registration failed');
+      const msg = err?.response?.data?.message || err.message || 'Registration failed';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +67,12 @@ export default function RegisterPage() {
         <Input label="Full Name" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} />
         <Input label="Email Address" type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
         <Input label="Password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} error={errors.password} />
-        <Select label="Account Type" value={role} onChange={(e) => setRole(e.target.value)} options={[{ value: 'USER', label: 'User' }, { value: 'MANAGER', label: 'Manager' }]} />
+        <Select label="Account Type" value={role} onChange={(e) => setRole(e.target.value)} options={[
+          { value: 'rep', label: 'Sales Rep' },
+          { value: 'manager', label: 'Sales Manager' },
+          { value: 'finance', label: 'Finance' },
+          { value: 'operations', label: 'Operations' },
+        ]} />
         <Button type="submit" size="lg" fullWidth isLoading={isLoading}>Create Account</Button>
       </form>
 

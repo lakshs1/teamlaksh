@@ -1,8 +1,10 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import toast from 'react-hot-toast';
+import { analyticsApi, approvalApi, quoteApi } from '../../services/apiServices';
 
-const salesData = [
+const DEFAULT_SALES_DATA = [
   { month: 'Jan', sales: 4.2 },
   { month: 'Feb', sales: 5.8 },
   { month: 'Mar', sales: 5.1 },
@@ -16,11 +18,51 @@ const salesData = [
 
 export default function SalesDashboardPage() {
   const navigate = useNavigate();
-  const { approvals, quotations, dealHealthAlerts } = useDealFlowStore();
+  const [loading, setLoading] = useState(true);
+  
+  const [salesData, setSalesData] = useState<any[]>([]);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+  const [activeQuotesCount, setActiveQuotesCount] = useState(0);
+  const [riskDealsCount, setRiskDealsCount] = useState(0);
 
-  const pendingApprovalsCount = approvals.filter((a) => a.status === 'Pending').length;
-  const activeQuotesCount = quotations.length;
-  const riskDealsCount = dealHealthAlerts.length;
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [salesRes, approvalsRes, quotesRes, alertsRes] = await Promise.all([
+          analyticsApi.getSalesReport(),
+          approvalApi.getPendingApprovals(),
+          quoteApi.getQuotes(),
+          analyticsApi.getAlerts()
+        ]);
+
+        const salesChartData = salesRes.data?.trendData || DEFAULT_SALES_DATA;
+        setSalesData(salesChartData.map((d: any) => ({
+          month: d.label || d.month,
+          sales: typeof d.sales === 'number' ? d.sales : (d.value || 0) / 1000 // Convert to K if needed, or keep as is.
+        })));
+
+        const approvals = approvalsRes.data?.items || approvalsRes.data || [];
+        setPendingApprovalsCount(approvals.filter((a: any) => a.status === 'Pending' || a.status === 'pending').length || approvals.length);
+
+        const quotes = quotesRes.data?.items || quotesRes.data || [];
+        setActiveQuotesCount(quotesRes.data?.total || quotes.length);
+
+        const alerts = alertsRes.data?.items || alertsRes.data || [];
+        setRiskDealsCount(alerts.length);
+
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to load sales dashboard');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return <div className="p-8 text-center">Loading dashboard...</div>;
+  }
 
   return (
     <div className="odoo-container">
@@ -96,7 +138,7 @@ export default function SalesDashboardPage() {
 
           <div style={{ width: '100%', height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={salesData}>
+              <AreaChart data={salesData.length > 0 ? salesData : DEFAULT_SALES_DATA}>
                 <defs>
                   <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#714B67" stopOpacity={0.4} />
@@ -122,7 +164,6 @@ export default function SalesDashboardPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <button
                 className="odoo-btn odoo-btn-primary"
-                onClick={() => navigate('/quotations/q-1')}
                 onClick={() => navigate('/quotations/create')}
                 style={{ justifyContent: 'flex-start' }}
               >

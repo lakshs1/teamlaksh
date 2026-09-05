@@ -1,13 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import toast from 'react-hot-toast';
+import { billingApi } from '../../services/apiServices';
+import { mapSubscription } from '../../services/dataMappers';
+import type { SubscriptionItem } from '../../stores/dealflowStore';
 
 export default function SubscriptionsListPage() {
   const navigate = useNavigate();
-  const { subscriptions } = useDealFlowStore();
+  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'All' | 'Active' | 'Paused' | 'Cancelled'>('All');
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const res = await billingApi.getSubscriptions();
+        const items = res.data?.items ?? res.data?.subscriptions ?? res.data ?? [];
+        setSubscriptions(items.map(mapSubscription));
+      } catch (err: any) {
+        setError(err.message || 'Failed to load subscriptions');
+        toast.error('Failed to load subscriptions');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
   const filteredSubs = subscriptions.filter((s) => filter === 'All' || s.status === filter);
+
+  if (loading) return <div className="odoo-container"><div className="p-4">Loading subscriptions...</div></div>;
+  if (error) return <div className="odoo-container"><div className="p-4 text-red-500">Error: {error}</div></div>;
 
   return (
     <div className="odoo-container">

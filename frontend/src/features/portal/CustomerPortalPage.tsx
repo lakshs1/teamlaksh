@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDealFlowStore } from '../../stores/dealflowStore';
 import { useAuthStore } from '../../stores/authStore';
-import { portalApi, quoteApi } from '../../services/apiServices';
-import { MOCK_PORTAL_QUOTE } from '../../services/mockData';
+import { portalApi } from '../../services/apiServices';
 import toast from 'react-hot-toast';
 
 export default function CustomerPortalPage() {
@@ -26,34 +25,68 @@ export default function CustomerPortalPage() {
 
   const quoteLines = liveQuote?.lines || liveQuote?.items || [];
 
-  useEffect(() => {
-    async function loadQuoteData() {
-      const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
-      if (useMock) {
-        setLiveQuote(MOCK_PORTAL_QUOTE);
-        setLoading(false);
-        return;
-      }
+  const loadQuoteData = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
 
-      setLoading(true);
-      setErrorMsg(null);
-      try {
-        // ✅ Public fetch using portalToken (No JWT required)
-        const res = await portalApi.getPortalQuote(activeToken || 'active');
-        if (res?.data) {
-          setLiveQuote(res.data);
-        } else if (res) {
-          setLiveQuote(res);
-        }
-      } catch (err: any) {
-        console.warn("Failed to load portal quote, falling back to mock quote:", err?.message);
-        setLiveQuote(MOCK_PORTAL_QUOTE);
-      } finally {
-        setLoading(false);
-      }
+    // 1. Check if any quotation matches in the active Zustand store
+    const storeQuotes = useDealFlowStore.getState().quotations;
+    const matchingStoreQuote = storeQuotes.find(
+      (q) =>
+        (q as any).portal_token === activeToken ||
+        (q as any).portalToken === activeToken ||
+        q.id === activeToken ||
+        q.reference === activeToken ||
+        (user?.name && q.customerName?.toLowerCase().includes(user.name.toLowerCase())) ||
+        (user?.email && user.email.includes('odoo') && q.customerName?.toLowerCase().includes('odoo'))
+    ) || (activeToken === 'active' && storeQuotes.length > 0 ? storeQuotes[0] : null);
+
+    if (matchingStoreQuote) {
+      setLiveQuote({
+        id: matchingStoreQuote.id,
+        reference: matchingStoreQuote.reference,
+        portal_token: (matchingStoreQuote as any).portal_token || (matchingStoreQuote as any).portalToken || matchingStoreQuote.id,
+        customer_name: matchingStoreQuote.customerName,
+        customer_tier: matchingStoreQuote.customerTier,
+        status: matchingStoreQuote.status,
+        date: matchingStoreQuote.date,
+        expires_at: matchingStoreQuote.expiryDate,
+        untaxed_amount: matchingStoreQuote.untaxedAmount,
+        tax_amount: matchingStoreQuote.taxAmount,
+        total_amount: matchingStoreQuote.totalAmount,
+        lines: matchingStoreQuote.lines.map((l) => ({
+          id: l.id,
+          product_name: l.productName,
+          category: l.category,
+          description: l.description,
+          quantity: l.quantity,
+          unit_price: l.unitPrice,
+          discount_pct: l.discount,
+          total: l.total,
+        })),
+      });
     }
+
+    // 2. Fetch live data from backend if available
+    try {
+      const tokenToFetch = activeToken || 'active';
+      const res = await portalApi.getPortalQuote(tokenToFetch);
+      if (res?.data) {
+        setLiveQuote(res.data);
+      } else if (res && (res as any).id) {
+        setLiveQuote(res);
+      }
+    } catch (err: any) {
+      console.warn("Portal quote fetch failed:", err?.message);
+      setErrorMsg('Failed to load live quote data.');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeToken, user]);
+
+  useEffect(() => {
     loadQuoteData();
-  }, [activeToken]);
+  }, [loadQuoteData]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,17 +98,11 @@ export default function CustomerPortalPage() {
     const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
     try {
       await portalApi.postComment(tokenToUse, { message: msgToSend });
-    } catch (err) {
+      // Re-fetch to get updated comments/state
+      await loadQuoteData();
+    } catch (err: any) {
       console.error("Failed to post comment", err);
-    }
-
-    if (import.meta.env.VITE_USE_MOCK_DATA !== 'false') {
-      setTimeout(() => {
-        addPortalMessage(
-          "Thank you for the message! Our sales desk has received your update and is reviewing the pricing terms.",
-          'Sales Rep'
-        );
-      }, 1000);
+      toast.error(err?.response?.data?.message || 'Failed to post comment');
     }
   };
 

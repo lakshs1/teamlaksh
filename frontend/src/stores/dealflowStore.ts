@@ -1,23 +1,22 @@
 import { create } from 'zustand';
 import {
-  MOCK_PRODUCTS,
-  MOCK_QUOTATIONS,
-  MOCK_APPROVALS,
-  MOCK_FULFILLMENTS,
-  MOCK_SUBSCRIPTIONS,
-  MOCK_INVOICES,
-  MOCK_DEAL_HEALTH_ALERTS,
-  MOCK_PORTAL_MESSAGES,
-} from '../services/mockData';
+  mapQuote,
+  mapApproval,
+  mapSubscription,
+  mapInvoice,
+  mapDealAlert,
+  mapProduct,
+} from '../services/dataMappers';
 
 export interface QuotationLine {
   id: string;
   productId: string;
   productName: string;
-  category: 'Hardware' | 'Services' | 'Subscriptions' | 'Accessories';
+  category: string;
   description: string;
   quantity: number;
   unitPrice: number;
+  costPrice?: number;
   discount: number; // percentage
   allowedDiscount: number;
   taxPercent: number;
@@ -138,7 +137,7 @@ export interface ProductItem {
   id: string;
   name: string;
   sku: string;
-  category: 'Hardware' | 'Accessories' | 'Services' | 'Subscriptions';
+  category: 'Hardware' | 'Accessories' | 'Services' | 'Subscriptions' | 'Enterprise Software' | string;
   salesPrice: number;
   costPrice: number;
   status: 'Active' | 'Draft' | 'Archived';
@@ -194,39 +193,23 @@ export interface DealFlowState {
 export const useDealFlowStore = create<DealFlowState>((set) => ({
   currentRole: 'Sales Manager',
   setRole: (role) => set({ currentRole: role }),
-  quotations: MOCK_QUOTATIONS,
-  approvals: MOCK_APPROVALS,
-  fulfillments: MOCK_FULFILLMENTS,
-  subscriptions: MOCK_SUBSCRIPTIONS,
-  invoices: MOCK_INVOICES,
-  dealHealthAlerts: MOCK_DEAL_HEALTH_ALERTS,
-  products: MOCK_PRODUCTS,
+
+  // Initialize with empty arrays — all data comes from backend via fetchLiveData()
+  quotations: [],
+  approvals: [],
+  fulfillments: [],
+  subscriptions: [],
+  invoices: [],
+  dealHealthAlerts: [],
+  products: [],
   discountRules: {
-    customerTierCeilings: [
-      { tier: 'Bronze', maxDiscount: 5 },
-      { tier: 'Silver', maxDiscount: 10 },
-      { tier: 'Gold', maxDiscount: 15 },
-    ],
-    categoryCeilings: [
-      { category: 'Hardware', maxDiscount: 15 },
-      { category: 'Services', maxDiscount: 10 },
-    ],
-    approvalChain: [
-      { discountRange: 'Within Tier/Category limit', approvalRequired: 'No approval needed' },
-      { discountRange: 'Over Limit, blended risk medium', approvalRequired: 'Sales Manager' },
-      { discountRange: 'Over Limit, blended risk high', approvalRequired: 'Sales Manager then Finance' },
-    ],
+    customerTierCeilings: [],
+    categoryCeilings: [],
+    approvalChain: [],
   },
-  portalMessages: MOCK_PORTAL_MESSAGES,
+  portalMessages: [],
 
   fetchLiveData: async () => {
-    // If running in mock data mode (default for UI design & testing), keep our rich mock state
-    const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
-    if (useMock) {
-      return;
-    }
-
-    // Dynamic live backend data loader (when VITE_USE_MOCK_DATA=false)
     try {
       const { quoteApi, catalogApi, approvalApi, billingApi, analyticsApi } = await import('../services/apiServices');
       
@@ -239,16 +222,28 @@ export const useDealFlowStore = create<DealFlowState>((set) => ({
         analyticsApi.getDealHealth(),
       ]);
 
-      set((state) => ({
-        quotations: quotesRes.status === 'fulfilled' && quotesRes.value?.data ? quotesRes.value.data : state.quotations,
-        products: prodsRes.status === 'fulfilled' && prodsRes.value?.data ? prodsRes.value.data : state.products,
-        approvals: appRes.status === 'fulfilled' && appRes.value?.data ? appRes.value.data : state.approvals,
-        subscriptions: subRes.status === 'fulfilled' && subRes.value?.data ? subRes.value.data : state.subscriptions,
-        invoices: invRes.status === 'fulfilled' && invRes.value?.data ? invRes.value.data : state.invoices,
-        dealHealthAlerts: healthRes.status === 'fulfilled' && healthRes.value?.data ? healthRes.value.data : state.dealHealthAlerts,
+      set(() => ({
+        quotations: quotesRes.status === 'fulfilled' && quotesRes.value?.data
+          ? (quotesRes.value.data.items || quotesRes.value.data).map(mapQuote)
+          : [],
+        products: prodsRes.status === 'fulfilled' && prodsRes.value?.data
+          ? (prodsRes.value.data.items || prodsRes.value.data).map(mapProduct)
+          : [],
+        approvals: appRes.status === 'fulfilled' && appRes.value?.data
+          ? (Array.isArray(appRes.value.data) ? appRes.value.data : []).map(mapApproval)
+          : [],
+        subscriptions: subRes.status === 'fulfilled' && subRes.value?.data
+          ? (Array.isArray(subRes.value.data) ? subRes.value.data : []).map(mapSubscription)
+          : [],
+        invoices: invRes.status === 'fulfilled' && invRes.value?.data
+          ? (invRes.value.data.items || invRes.value.data || []).map(mapInvoice)
+          : [],
+        dealHealthAlerts: healthRes.status === 'fulfilled' && healthRes.value?.data
+          ? (healthRes.value.data.stalled_quotes || healthRes.value.data.stalledQuotes || []).map(mapDealAlert)
+          : [],
       }));
     } catch {
-      // Clean error handling
+      // Silently handle — pages will show empty state
     }
   },
 
@@ -345,7 +340,7 @@ export const useDealFlowStore = create<DealFlowState>((set) => ({
       {
         id: `pm-${Date.now()}`,
         sender,
-        senderName: sender === 'Customer' ? 'Acme Corp' : 'Sales Lead',
+        senderName: sender === 'Customer' ? 'Customer' : 'Sales Rep',
         timestamp: 'Just now',
         text,
       },

@@ -1,17 +1,49 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
+import { billingApi } from '../../services/apiServices';
+import { mapSubscription } from '../../services/dataMappers';
+import type { SubscriptionItem } from '../../stores/dealflowStore';
 
 export default function SubscriptionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { subscriptions } = useDealFlowStore();
+  const [item, setItem] = useState<SubscriptionItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const item = subscriptions.find((s) => s.id === id) || subscriptions[0];
-
-  const handleCancel = () => {
-    toast.error('Subscription cancellation requested. Proration credit calculated: ₹12,500');
+  const fetchSubscription = async () => {
+    try {
+      setLoading(true);
+      const res = await billingApi.getSubscriptionById(id!);
+      setItem(mapSubscription(res.data));
+    } catch (err: any) {
+      setError(err.message || 'Failed to load subscription');
+      toast.error('Failed to load subscription');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    if (id) {
+      fetchSubscription();
+    }
+  }, [id]);
+
+  const handleCancel = async () => {
+    try {
+      if (!item) return;
+      await billingApi.cancelSubscription(item.id);
+      toast.error('Subscription cancellation requested. Proration credit calculated: ₹12,500');
+      navigate('/subscriptions');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Cancellation failed');
+    }
+  };
+
+  if (loading) return <div className="odoo-container"><div className="p-4">Loading subscription...</div></div>;
+  if (error || !item) return <div className="odoo-container"><div className="p-4 text-red-500">Error: {error || 'Subscription not found'}</div></div>;
 
   return (
     <div className="odoo-container">

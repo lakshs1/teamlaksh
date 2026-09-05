@@ -172,13 +172,26 @@ export default function AuthPortalPage() {
 
     let portalTokenToUse = res?.data?.user?.portal_token || res?.data?.user?.portalToken;
     if (!portalTokenToUse) {
-      try {
-        const qRes = await quoteApi.getQuotes();
-        const qList = qRes?.data || qRes || [];
-        if (Array.isArray(qList) && qList.length > 0) {
-          portalTokenToUse = qList[0].portal_token || qList[0].portalToken;
-        }
-      } catch { }
+      const storeQuotes = useDealFlowStore.getState().quotations;
+      const matchedStoreQuote = storeQuotes.find(
+        (q) =>
+          q.customerName?.toLowerCase().includes('odoo') ||
+          (custEmail && q.customerName?.toLowerCase().includes(custEmail.split('@')[0].toLowerCase()))
+      ) || storeQuotes[0];
+
+      if (matchedStoreQuote) {
+        portalTokenToUse = (matchedStoreQuote as any).portal_token || (matchedStoreQuote as any).portalToken || matchedStoreQuote.id;
+      }
+
+      if (!portalTokenToUse) {
+        try {
+          const qRes = await quoteApi.getQuotes();
+          const qList = qRes?.data || qRes || [];
+          if (Array.isArray(qList) && qList.length > 0) {
+            portalTokenToUse = qList[0].portal_token || qList[0].portalToken || qList[0].id;
+          }
+        } catch { }
+      }
     }
 
     toast.success(`Logged in as Customer (${custEmail})`);
@@ -345,18 +358,30 @@ export default function AuthPortalPage() {
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px dashed #CBD5E1' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Demo Customer:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustEmail('customer@acme-corp.com');
-                      setCustPassword('password123');
-                    }}
-                    style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Quick-Fill Demo
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', backgroundColor: '#F8FAFC', padding: '0.6rem 0.75rem', borderRadius: 6, border: '1px dashed #CBD5E1' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 700 }}>Quick-Fill Customer Account:</span>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustEmail('evaluators@odoo.com');
+                        setCustPassword('password123');
+                      }}
+                      style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      odoo-evaluators (Gold Tier) ⭐
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustEmail('customer@acme-corp.com');
+                        setCustPassword('password123');
+                      }}
+                      style={{ background: '#64748B', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Acme Corp
+                    </button>
+                  </div>
                 </div>
 
                 <form onSubmit={handleCustomerSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -428,19 +453,43 @@ export default function AuthPortalPage() {
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px dashed #CBD5E1' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Demo Sales Manager:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmpEmail('manager@dealflow360.dev');
-                      setEmpRole('Sales Manager');
-                      setEmpPassword('password123');
-                    }}
-                    style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    Quick-Fill Manager ⚡
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', backgroundColor: '#F8FAFC', padding: '0.6rem 0.75rem', borderRadius: 6, border: '1px dashed #CBD5E1' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#475569', fontWeight: 700 }}>Quick-Fill Team Access:</span>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmpEmail('ayush@dealflow360.dev');
+                        setEmpRole('Sales Rep');
+                        setEmpPassword('password123');
+                      }}
+                      style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Ayush (Sales Rep) 💼
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmpEmail('lakshya@dealflow360.dev');
+                        setEmpRole('Sales Manager');
+                        setEmpPassword('password123');
+                      }}
+                      style={{ background: '#0D9488', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Lakshya (Sales Manager) 👔
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmpEmail('mawiya@dealflow360.dev');
+                        setEmpRole('Admin');
+                        setEmpPassword('password123');
+                      }}
+                      style={{ background: '#1E293B', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Mawiya (Admin) 🛡️
+                    </button>
+                  </div>
                 </div>
 
                 <form onSubmit={handleEmployeeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

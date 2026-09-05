@@ -1,26 +1,55 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { fulfillmentApi } from '../../services/apiServices';
 
 export default function WarehouseSetupPage() {
-  const [warehouses, setWarehouses] = useState([
-    { id: 'wh-1', name: 'Main Warehouse', code: 'WH/MAIN', stockLevel: 450, costWeight: 1.0, replenishmentMin: 100 },
-    { id: 'wh-2', name: 'East Depot', code: 'WH/EAST', stockLevel: 180, costWeight: 1.25, replenishmentMin: 50 },
-  ]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [newName, setNewName] = useState('');
   const [newCode, setNewCode] = useState('');
+  const [newCostWeight, setNewCostWeight] = useState('1.0');
 
-  const handleAddWarehouse = (e: React.FormEvent) => {
+  const fetchWarehouses = async () => {
+    try {
+      setLoading(true);
+      const res = await fulfillmentApi.getWarehouses();
+      setWarehouses(res.data || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load warehouses');
+      toast.error('Failed to load warehouses');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchWarehouses();
+  }, []);
+
+  const handleAddWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newCode.trim()) return;
-    setWarehouses([
-      ...warehouses,
-      { id: `wh-${Date.now()}`, name: newName, code: newCode, stockLevel: 100, costWeight: 1.1, replenishmentMin: 25 },
-    ]);
-    setNewName('');
-    setNewCode('');
-    toast.success(`Warehouse ${newName} configured!`);
+    
+    try {
+      await fulfillmentApi.createWarehouse({
+        name: newName,
+        code: newCode,
+        shipping_cost_weight: Number(newCostWeight)
+      });
+      toast.success(`Warehouse ${newName} configured!`);
+      setNewName('');
+      setNewCode('');
+      setNewCostWeight('1.0');
+      fetchWarehouses();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to add warehouse');
+    }
   };
+
+  if (loading && warehouses.length === 0) return <div className="p-4">Loading settings...</div>;
+  if (error && warehouses.length === 0) return <div className="p-4 text-red-500">Error: {error}</div>;
 
   return (
     <div className="odoo-container">
@@ -38,9 +67,8 @@ export default function WarehouseSetupPage() {
               <tr>
                 <th>Warehouse Name</th>
                 <th>Code</th>
-                <th>Stock Units</th>
+                <th>Location</th>
                 <th>Shipping Cost Weight</th>
-                <th>Replenishment Min</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -49,12 +77,14 @@ export default function WarehouseSetupPage() {
                 <tr key={w.id}>
                   <td style={{ fontWeight: 700, color: '#714B67' }}>{w.name}</td>
                   <td style={{ fontWeight: 600 }}>{w.code}</td>
-                  <td>{w.stockLevel} units</td>
-                  <td>{w.costWeight}x base rate</td>
-                  <td>{w.replenishmentMin} units</td>
+                  <td>{w.location || '-'}</td>
+                  <td>{w.shippingCostWeight || w.shipping_cost_weight || 1}x base rate</td>
                   <td><span className="odoo-badge">Active</span></td>
                 </tr>
               ))}
+              {warehouses.length === 0 && (
+                <tr><td colSpan={5}>No warehouses found.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -88,6 +118,20 @@ export default function WarehouseSetupPage() {
                 placeholder="WH/SOUTH"
                 value={newCode}
                 onChange={(e) => setNewCode(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
+                Shipping Cost Weight
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                className="odoo-input"
+                placeholder="1.0"
+                value={newCostWeight}
+                onChange={(e) => setNewCostWeight(e.target.value)}
                 required
               />
             </div>

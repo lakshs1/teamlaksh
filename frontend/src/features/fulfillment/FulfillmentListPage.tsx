@@ -1,11 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import { toast } from 'react-hot-toast';
+import { quoteApi } from '../../services/apiServices';
+import { mapFulfillment } from '../../services/dataMappers';
+import type { FulfillmentItem } from '../../stores/dealflowStore';
 
 export default function FulfillmentListPage() {
   const navigate = useNavigate();
-  const { fulfillments } = useDealFlowStore();
+  const [fulfillments, setFulfillments] = useState<FulfillmentItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchFulfillments = async () => {
+      try {
+        setLoading(true);
+        // Fetch quotes with fulfillment status
+        const res = await quoteApi.getQuotes({ status: 'fulfillment' });
+        const data = res.data?.quotes ?? res.data ?? [];
+        setFulfillments(data.map(mapFulfillment));
+      } catch (err: any) {
+        setError(err.message || 'Failed to load fulfillments');
+        toast.error('Failed to load fulfillments');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFulfillments();
+  }, []);
 
   const filteredFulfillments = fulfillments.filter(
     (f) =>
@@ -34,42 +57,53 @@ export default function FulfillmentListPage() {
           />
         </div>
 
-        <table className="odoo-table">
-          <thead>
-            <tr>
-              <th><input type="checkbox" /></th>
-              <th>Reference</th>
-              <th>Customer</th>
-              <th>Scheduled Date</th>
-              <th>Responsible</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredFulfillments.map((f) => (
-              <tr key={f.id}>
-                <td><input type="checkbox" /></td>
-                <td style={{ fontWeight: 700, color: '#714B67' }}>{f.reference}</td>
-                <td style={{ fontWeight: 600 }}>{f.customerName}</td>
-                <td>{f.scheduledDate}</td>
-                <td>{f.responsible}</td>
-                <td>
-                  <span className="odoo-badge">{f.status}</span>
-                </td>
-                <td>
-                  <button
-                    className="odoo-btn odoo-btn-secondary"
-                    style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
-                    onClick={() => navigate(`/fulfillment/${f.id}`)}
-                  >
-                    View
-                  </button>
-                </td>
+        {loading ? (
+          <div style={{ padding: '2rem', textAlign: 'center' }}>Loading fulfillments...</div>
+        ) : error ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'red' }}>{error}</div>
+        ) : (
+          <table className="odoo-table">
+            <thead>
+              <tr>
+                <th><input type="checkbox" /></th>
+                <th>Reference</th>
+                <th>Customer</th>
+                <th>Scheduled Date</th>
+                <th>Responsible</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredFulfillments.map((f) => (
+                <tr key={f.id}>
+                  <td><input type="checkbox" /></td>
+                  <td style={{ fontWeight: 700, color: '#714B67' }}>{f.reference}</td>
+                  <td style={{ fontWeight: 600 }}>{f.customerName}</td>
+                  <td>{f.scheduledDate}</td>
+                  <td>{f.responsible}</td>
+                  <td>
+                    <span className="odoo-badge">{f.status}</span>
+                  </td>
+                  <td>
+                    <button
+                      className="odoo-btn odoo-btn-secondary"
+                      style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                      onClick={() => navigate(`/fulfillment/${f.id}`)}
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {filteredFulfillments.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '1rem' }}>No fulfillments found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

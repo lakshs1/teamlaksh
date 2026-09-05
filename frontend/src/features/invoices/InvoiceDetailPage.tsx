@@ -1,18 +1,49 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
+import { billingApi } from '../../services/apiServices';
+import { mapInvoice } from '../../services/dataMappers';
+import type { InvoiceItem } from '../../stores/dealflowStore';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { invoices, registerInvoicePayment } = useDealFlowStore();
+  const [item, setItem] = useState<InvoiceItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const item = invoices.find((inv) => inv.id === id) || invoices[0];
-
-  const handleRegisterPayment = () => {
-    registerInvoicePayment(item.id);
-    toast.success(`Payment of ₹${item.amount.toLocaleString('en-IN')} recorded! Invoice status updated to Paid.`);
+  const fetchInvoice = async () => {
+    try {
+      setLoading(true);
+      const res = await billingApi.getInvoiceById(id!);
+      setItem(mapInvoice(res.data));
+    } catch (err: any) {
+      setError(err.message || 'Failed to load invoice');
+      toast.error('Failed to load invoice');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    if (id) {
+      fetchInvoice();
+    }
+  }, [id]);
+
+  const handleRegisterPayment = async () => {
+    try {
+      if (!item) return;
+      await billingApi.payInvoice(item.id);
+      toast.success(`Payment of ₹${item.amount.toLocaleString('en-IN')} recorded! Invoice status updated to Paid.`);
+      await fetchInvoice();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Payment failed');
+    }
+  };
+
+  if (loading) return <div className="odoo-container"><div className="p-4">Loading invoice...</div></div>;
+  if (error || !item) return <div className="odoo-container"><div className="p-4 text-red-500">Error: {error || 'Invoice not found'}</div></div>;
 
   return (
     <div className="odoo-container">

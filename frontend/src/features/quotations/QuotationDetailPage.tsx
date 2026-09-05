@@ -1,38 +1,94 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import { quoteApi, recommendationApi } from '../../services/apiServices';
+import { mapQuote } from '../../services/dataMappers';
+import toast from 'react-hot-toast';
 
 export default function QuotationDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { quotations, updateQuotationLine, addQuotationLine } = useDealFlowStore();
 
-  const quote = quotations.find((q) => q.id === id) || quotations[0];
+  const [quote, setQuote] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [upsellSuggestions, setUpsellSuggestions] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'lines' | 'info'>('lines');
   const [showUpsell, setShowUpsell] = useState(true);
 
-  // Compute total revenue and cost to derive margin
-  const totalRevenue = quote.untaxedAmount;
-  const totalCost = quote.lines.reduce((acc, line) => acc + (line.unitPrice * 0.7) * line.quantity, 0);
-  const marginPercent = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 35;
-
-  const handleQtyChange = (lineId: string, currentQty: number, delta: number) => {
-    const newQty = Math.max(1, currentQty + delta);
-    updateQuotationLine(quote.id, lineId, { quantity: newQty });
+  const fetchQuoteData = async () => {
+    if (!id) return;
+    try {
+      setLoading(true);
+      const res = await quoteApi.getQuoteDetails(id);
+      setQuote(mapQuote(res.data));
+      
+      try {
+        const recRes = await recommendationApi.getSuggestions(id);
+        const suggestions = recRes.data?.items ?? recRes.data ?? [];
+        setUpsellSuggestions(suggestions);
+      } catch (e) {
+        // Fallback or ignore if recommendations fail
+      }
+    } catch (err: any) {
+      toast.error('Failed to load quotation details');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAddUpsellItem = (name: string, price: number, cat: 'Hardware' | 'Services' | 'Subscriptions' | 'Accessories') => {
-    addQuotationLine(quote.id, {
-      productId: `upsell-${Date.now()}`,
-      productName: name,
-      category: cat,
-      description: 'Recommended cross-sell item',
-      quantity: 10,
-      unitPrice: price,
-      discount: 0,
-      allowedDiscount: 15,
-      taxPercent: 18,
-    });
+  useEffect(() => {
+    fetchQuoteData();
+  }, [id]);
+
+  if (loading) {
+    return <div className="odoo-container"><div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div></div>;
+  }
+
+  if (!quote) {
+    return <div className="odoo-container"><div style={{ padding: '2rem', textAlign: 'center' }}>Quotation not found</div></div>;
+  }
+
+  // Compute total revenue and cost to derive margin
+  const totalRevenue = quote.untaxedAmount;
+  const totalCost = quote.lines.reduce((acc: number, line: any) => acc + (line.unitPrice * 0.7) * line.quantity, 0);
+  const marginPercent = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 35;
+
+  const handleQtyChange = async (lineId: string, currentQty: number, delta: number) => {
+    const newQty = Math.max(1, currentQty + delta);
+    try {
+      await quoteApi.updateLine(quote.id, lineId, { quantity: newQty });
+      toast.success('Quantity updated');
+      fetchQuoteData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to update quantity');
+    }
+  };
+
+  const handleDeleteLine = async (lineId: string) => {
+    if (confirm('Are you sure you want to delete this line?')) {
+      try {
+        await quoteApi.deleteLine(quote.id, lineId);
+        toast.success('Line deleted');
+        fetchQuoteData();
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || 'Failed to delete line');
+      }
+    }
+  };
+
+  const handleAddUpsellItem = async (productId: number | string, isUpsell: boolean = true) => {
+    try {
+      // Need product id, we'll try to convert or fallback
+      const pId = typeof productId === 'string' ? parseInt(productId.replace(/\D/g, '')) || 1 : productId;
+      await quoteApi.addLine(quote.id, {
+        product_id: pId,
+        quantity: 1,
+        is_upsell: isUpsell,
+      });
+      toast.success('Item added to quote');
+      fetchQuoteData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to add item');
+    }
   };
 
   return (
@@ -66,7 +122,7 @@ export default function QuotationDetailPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: showUpsell ? '3fr 1fr' : '1fr', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: showUpsell && upsellSuggestions.length > 0 ? '3fr 1fr' : '1fr', gap: '1.5rem' }}>
         {/* Main Quote Card */}
         <div className="odoo-card">
           {/* Metadata Top Grid */}
@@ -155,10 +211,11 @@ export default function QuotationDetailPage() {
                     <th>Discount (%)</th>
                     <th>Taxes</th>
                     <th>Amount</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {quote.lines.map((line) => (
+                  {quote.lines.map((line: any) => (
                     <tr key={line.id}>
                       <td style={{ fontWeight: 600 }}>{line.productName}</td>
                       <td>{line.description}</td>
@@ -189,8 +246,24 @@ export default function QuotationDetailPage() {
                       </td>
                       <td>{line.taxPercent}%</td>
                       <td style={{ fontWeight: 700 }}>₹{line.total.toLocaleString('en-IN')}</td>
+                      <td>
+                        <button
+                          className="odoo-btn odoo-btn-secondary"
+                          style={{ padding: '0.2rem 0.4rem', color: '#EF4444' }}
+                          onClick={() => handleDeleteLine(line.id)}
+                        >
+                          ✕
+                        </button>
+                      </td>
                     </tr>
                   ))}
+                  {quote.lines.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94A3B8' }}>
+                        No order lines
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
 
@@ -222,7 +295,7 @@ export default function QuotationDetailPage() {
         </div>
 
         {/* Right Side Panel: Screen 5 Upsell & Cross-sell panel */}
-        {showUpsell && (
+        {showUpsell && upsellSuggestions.length > 0 && (
           <div className="odoo-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937' }}>
@@ -239,39 +312,26 @@ export default function QuotationDetailPage() {
               Recommended pairings based on co-purchase history and active promotions:
             </p>
 
-            <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '0.75rem', backgroundColor: '#F8F9FA' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.8125rem' }}>Keyboard K380</span>
-                <span className="odoo-badge">PROMO</span>
+            {upsellSuggestions.map((suggestion, idx) => (
+              <div key={idx} style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '0.75rem', backgroundColor: '#F8F9FA' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{suggestion.productName || suggestion.name}</span>
+                  {suggestion.is_promoted && <span className="odoo-badge">PROMO</span>}
+                </div>
+                {suggestion.reason && (
+                  <div style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '0.5rem' }}>
+                    {suggestion.reason}
+                  </div>
+                )}
+                <button
+                  className="odoo-btn odoo-btn-primary"
+                  style={{ width: '100%', fontSize: '0.75rem', padding: '0.3rem' }}
+                  onClick={() => handleAddUpsellItem(suggestion.suggested_product_id || suggestion.id, true)}
+                >
+                  + Add to Quote
+                </button>
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '0.5rem' }}>
-                +2.4% Gross Margin impact
-              </div>
-              <button
-                className="odoo-btn odoo-btn-primary"
-                style={{ width: '100%', fontSize: '0.75rem', padding: '0.3rem' }}
-                onClick={() => handleAddUpsellItem('Keyboard K380', 3000, 'Accessories')}
-              >
-                + Add to Quote
-              </button>
-            </div>
-
-            <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '0.75rem', backgroundColor: '#F8F9FA' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.8125rem' }}>24x7 Care Plan</span>
-                <span className="odoo-badge">HIGH MARGIN</span>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '0.5rem' }}>
-                +5.1% Recurring Margin impact
-              </div>
-              <button
-                className="odoo-btn odoo-btn-primary"
-                style={{ width: '100%', fontSize: '0.75rem', padding: '0.3rem' }}
-                onClick={() => handleAddUpsellItem('Care Plan 24x7', 10000, 'Subscriptions')}
-              >
-                + Add to Quote
-              </button>
-            </div>
+            ))}
           </div>
         )}
       </div>

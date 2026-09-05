@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDealFlowStore, type ProductItem } from '../../stores/dealflowStore';
+import { type ProductItem } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
 import { catalogApi } from '../../services/apiServices';
-import { MOCK_CATEGORIES } from '../../services/mockData';
+import { mapProduct } from '../../services/dataMappers';
 
 interface CategoryOption {
   id: number;
@@ -13,12 +13,15 @@ interface CategoryOption {
 
 export default function ProductCatalogPage() {
   const navigate = useNavigate();
-  const { products, addProduct, fetchLiveData } = useDealFlowStore();
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [errorProducts, setErrorProducts] = useState<string | null>(null);
+
   // Dynamic categories from backend DB
-  const [categories, setCategories] = useState<CategoryOption[]>(MOCK_CATEGORIES);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | ''>(MOCK_CATEGORIES[0]?.id || 1);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | ''>('');
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
 
   // New Product Modal State
@@ -34,13 +37,26 @@ export default function ProductCatalogPage() {
   const [recurringInterval, setRecurringInterval] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
   const [prodDescription, setProdDescription] = useState('');
 
-  // Load dynamic categories & live products on mount if not in pure mock mode
+  const loadProducts = useCallback(async () => {
+    try {
+      setLoadingProducts(true);
+      setErrorProducts(null);
+      const res = await catalogApi.getProducts();
+      const items = res.data?.products ?? res.data ?? [];
+      setProducts(items.map(mapProduct));
+    } catch (err: any) {
+      const msg = err.message || 'Failed to load products';
+      setErrorProducts(msg);
+      toast.error(msg);
+    } finally {
+      setLoadingProducts(false);
+    }
+  }, []);
+
+  // Load dynamic categories & live products on mount
   useEffect(() => {
     let isMounted = true;
     const loadCategories = async () => {
-      const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
-      if (useMock) return;
-
       setIsLoadingCategories(true);
       try {
         const res = await catalogApi.getCategories();
@@ -50,19 +66,19 @@ export default function ProductCatalogPage() {
           setSelectedCategoryId(fetchedCategories[0].id);
         }
       } catch (err: any) {
-        console.warn('Backend categories fetch failed, using mock categories:', err?.message);
+        toast.error('Failed to load categories');
       } finally {
         if (isMounted) setIsLoadingCategories(false);
       }
     };
 
     loadCategories();
-    fetchLiveData?.();
+    loadProducts();
 
     return () => {
       isMounted = false;
     };
-  }, [fetchLiveData]);
+  }, [loadProducts]);
 
   const handleCategorySelect = (categoryId: number) => {
     setSelectedCategoryId(categoryId);
@@ -93,63 +109,41 @@ export default function ProductCatalogPage() {
     }
 
     setSubmitting(true);
-    const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
-    const selectedCat = categories.find((c) => c.id === Number(selectedCategoryId));
-    let createdProdFromDb: any = null;
+    
+    try {
+      await catalogApi.createProduct({
+        name: prodName.trim(),
+        description: prodDescription.trim() || 'New product item added to catalog.',
+        category_id: Number(selectedCategoryId),
+        base_price: Number(prodSalesPrice) || 0,
+        cost_price: Number(prodCostPrice) || 0,
+        unit: prodUnit.trim() || 'unit',
+        sku: prodSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+        tax_pct: 18,
+        is_recurring: isRecurring,
+        recurring_interval: isRecurring ? recurringInterval : undefined,
+        is_active: isActive,
+      });
 
-    if (!useMock) {
-      try {
-        const res = await catalogApi.createProduct({
-          name: prodName.trim(),
-          description: prodDescription.trim() || 'New product item added to catalog.',
-          category_id: Number(selectedCategoryId),
-          base_price: Number(prodSalesPrice) || 0,
-          cost_price: Number(prodCostPrice) || 0,
-          unit: prodUnit.trim() || 'unit',
-          sku: prodSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-          tax_pct: 18,
-          is_recurring: isRecurring,
-          recurring_interval: isRecurring ? recurringInterval : undefined,
-          is_active: isActive,
-        });
-
-        if (res?.data) {
-          createdProdFromDb = res.data;
-        }
-      } catch (err: any) {
-        console.warn("Backend create product failed, adding to local catalog:", err?.message);
-      }
+      toast.success(`Product "${prodName}" added to catalog!`);
+      await loadProducts();
+      
+      // Reset form
+      setProdName('');
+      setProdSku('');
+      setProdSalesPrice('');
+      setProdCostPrice('');
+      setProdUnit('unit');
+      setIsActive(true);
+      setIsRecurring(false);
+      setRecurringInterval('monthly');
+      setProdDescription('');
+      setShowModal(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Failed to create product');
     }
-
-    const newProd: ProductItem = {
-      id: createdProdFromDb?.id ? String(createdProdFromDb.id) : `prod-${Date.now()}`,
-      name: createdProdFromDb?.name || prodName.trim(),
-      sku: createdProdFromDb?.sku || prodSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-      category: (selectedCat?.name as any) || 'Hardware',
-      salesPrice: createdProdFromDb?.basePrice !== undefined ? Number(createdProdFromDb.basePrice) : (Number(prodSalesPrice) || 0),
-      costPrice: createdProdFromDb?.costPrice !== undefined ? Number(createdProdFromDb.costPrice) : (Number(prodCostPrice) || 0),
-      status: isActive ? 'Active' : 'Draft',
-      description: createdProdFromDb?.description || prodDescription.trim() || 'New product item added to catalog.',
-      canBeSold: true,
-      canBePurchased: true,
-    };
-
-    addProduct(newProd);
-    toast.success(`Product "${newProd.name}" added to catalog!`);
-
-    // Reset form
-    setProdName('');
-    setProdSku('');
-    setProdSalesPrice('');
-    setProdCostPrice('');
-    setProdUnit('unit');
-    setIsActive(true);
-    setIsRecurring(false);
-    setRecurringInterval('monthly');
-    setProdDescription('');
-    setShowModal(false);
-    setSubmitting(false);
   };
+
 
   return (
     <div className="odoo-container" style={{ position: 'relative' }}>

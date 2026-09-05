@@ -1,17 +1,37 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import { quoteApi } from '../../services/apiServices';
+import { mapQuote } from '../../services/dataMappers';
+import toast from 'react-hot-toast';
 
 export default function QuotationsListPage() {
   const navigate = useNavigate();
-  const { quotations } = useDealFlowStore();
+  const [quotations, setQuotations] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredQuotes = quotations.filter(
-    (q) =>
-      q.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      q.customerName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    const fetchQuotes = async () => {
+      try {
+        setLoading(true);
+        const res = await quoteApi.getQuotes({ search: searchTerm });
+        const items = res.data?.items ?? res.data?.quotes ?? res.data ?? [];
+        setQuotations(items.map(mapQuote));
+      } catch (err: any) {
+        setError(err.message || 'Failed to load data');
+        toast.error('Failed to load quotations');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    // Simple debounce for search
+    const timer = setTimeout(() => {
+      fetchQuotes();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   return (
     <div className="odoo-container">
@@ -22,7 +42,6 @@ export default function QuotationsListPage() {
         </div>
         <button
           className="odoo-btn odoo-btn-primary"
-          onClick={() => navigate('/quotations/q-1')}
           onClick={() => navigate('/quotations/create')}
         >
           + Create Quotation
@@ -41,7 +60,7 @@ export default function QuotationsListPage() {
             style={{ maxWidth: 360 }}
           />
           <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>
-            Showing {filteredQuotes.length} of {quotations.length}
+            Showing {quotations.length} quotations
           </span>
         </div>
 
@@ -59,7 +78,19 @@ export default function QuotationsListPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredQuotes.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#64748B' }}>
+                  Loading quotations...
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#EF4444' }}>
+                  {error}
+                </td>
+              </tr>
+            ) : quotations.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#64748B' }}>
                   <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#475569', marginBottom: '0.4rem' }}>
@@ -71,7 +102,7 @@ export default function QuotationsListPage() {
                 </td>
               </tr>
             ) : (
-              filteredQuotes.map((q) => (
+              quotations.map((q) => (
                 <tr key={q.id}>
                   <td><input type="checkbox" /></td>
                   <td style={{ fontWeight: 700, color: '#714B67' }}>{q.reference}</td>

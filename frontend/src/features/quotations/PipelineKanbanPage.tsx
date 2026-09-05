@@ -1,11 +1,31 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import { quoteApi } from '../../services/apiServices';
+import { mapQuote } from '../../services/dataMappers';
+import toast from 'react-hot-toast';
 
 export default function PipelineKanbanPage() {
   const navigate = useNavigate();
-  const { quotations } = useDealFlowStore();
+  const [quotations, setQuotations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const stages = ['Draft', 'Pending Approval', 'Approved', 'Confirmed'] as const;
+
+  useEffect(() => {
+    const fetchQuotes = async () => {
+      try {
+        setLoading(true);
+        const res = await quoteApi.getQuotes();
+        const items = res.data?.items ?? res.data?.quotes ?? res.data ?? [];
+        setQuotations(items.map(mapQuote));
+      } catch (err: any) {
+        toast.error('Failed to load pipeline data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchQuotes();
+  }, []);
 
   return (
     <div className="odoo-container">
@@ -18,67 +38,70 @@ export default function PipelineKanbanPage() {
           <button className="odoo-btn odoo-btn-secondary" onClick={() => navigate('/quotations')}>
             List View
           </button>
-          <button className="odoo-btn odoo-btn-primary" onClick={() => navigate('/quotations/q-1')}>
           <button className="odoo-btn odoo-btn-primary" onClick={() => navigate('/quotations/create')}>
             + Create Quotation
           </button>
         </div>
       </div>
 
+      {loading && <div style={{ padding: '2rem', textAlign: 'center', color: '#64748B' }}>Loading pipeline...</div>}
+
       {/* Kanban Board Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', alignItems: 'flex-start' }}>
-        {stages.map((stage) => {
-          const stageQuotes = quotations.filter((q) => q.status === stage || (stage === 'Draft' && q.status === 'Sent'));
-          return (
-            <div
-              key={stage}
-              style={{
-                backgroundColor: '#F8F9FA',
-                border: '1px solid #E2E8F0',
-                borderRadius: 8,
-                padding: '1rem',
-                minHeight: 450,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '2px solid #714B67' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1F2937' }}>{stage}</span>
-                <span className="odoo-badge">{stageQuotes.length}</span>
+      {!loading && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', alignItems: 'flex-start' }}>
+          {stages.map((stage) => {
+            const stageQuotes = quotations.filter((q) => q.status === stage || (stage === 'Draft' && q.status === 'Sent'));
+            return (
+              <div
+                key={stage}
+                style={{
+                  backgroundColor: '#F8F9FA',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: 8,
+                  padding: '1rem',
+                  minHeight: 450,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '2px solid #714B67' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1F2937' }}>{stage}</span>
+                  <span className="odoo-badge">{stageQuotes.length}</span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                  {stageQuotes.map((q) => (
+                    <div
+                      key={q.id}
+                      className="odoo-card"
+                      onClick={() => navigate(`/quotations/${q.id}`)}
+                      style={{ cursor: 'pointer', padding: '0.85rem' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                        <span style={{ fontWeight: 700, color: '#714B67', fontSize: '0.875rem' }}>{q.reference}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{q.customerTier}</span>
+                      </div>
+
+                      <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#1F2937', marginBottom: '0.4rem' }}>
+                        {q.customerName}
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
+                        <span style={{ fontWeight: 700, color: '#334155' }}>₹{q.totalAmount.toLocaleString('en-IN')}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{q.expiryDate}</span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {stageQuotes.length === 0 && (
+                    <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: '0.8125rem', padding: '2rem 0' }}>
+                      No quotes in {stage}
+                    </div>
+                  )}
+                </div>
               </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {stageQuotes.map((q) => (
-                  <div
-                    key={q.id}
-                    className="odoo-card"
-                    onClick={() => navigate(`/quotations/${q.id}`)}
-                    style={{ cursor: 'pointer', padding: '0.85rem' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-                      <span style={{ fontWeight: 700, color: '#714B67', fontSize: '0.875rem' }}>{q.reference}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{q.customerTier}</span>
-                    </div>
-
-                    <div style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#1F2937', marginBottom: '0.4rem' }}>
-                      {q.customerName}
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8125rem' }}>
-                      <span style={{ fontWeight: 700, color: '#334155' }}>₹{q.totalAmount.toLocaleString('en-IN')}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{q.expiryDate}</span>
-                    </div>
-                  </div>
-                ))}
-
-                {stageQuotes.length === 0 && (
-                  <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: '0.8125rem', padding: '2rem 0' }}>
-                    No quotes in {stage}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
