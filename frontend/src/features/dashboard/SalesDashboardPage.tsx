@@ -123,6 +123,7 @@ export default function SalesDashboardPage() {
               <button
                 className="odoo-btn odoo-btn-primary"
                 onClick={() => navigate('/quotations/q-1')}
+                onClick={() => navigate('/quotations/create')}
                 style={{ justifyContent: 'flex-start' }}
               >
                 + New Quotation

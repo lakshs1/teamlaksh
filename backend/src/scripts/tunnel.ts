@@ -8,9 +8,11 @@ const port = Number(process.env.PORT) || 5000;
 
 async function startTunnel() {
   try {
+    const domain = process.env.NGROK_DOMAIN || "nonmanually-polyarticular-chantell.ngrok-free.dev";
     const listener = await ngrok.forward({
       addr: port,
       authtoken: authtoken,
+      domain: domain,
     });
 
     const url = listener.url();

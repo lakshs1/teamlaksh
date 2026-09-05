@@ -1,7 +1,16 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api';
+let rawUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:5000/api/v1';
+rawUrl = rawUrl.trim().replace(/\/+$/, '');
+if (!rawUrl.endsWith('/api/v1')) {
+  if (rawUrl.endsWith('/api')) {
+    rawUrl = `${rawUrl}/v1`;
+  } else {
+    rawUrl = `${rawUrl}/api/v1`;
+  }
+}
+const BASE_URL = rawUrl;
 
 export const api = axios.create({
   baseURL: BASE_URL,
@@ -26,9 +35,10 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      // Token expired / invalid — clear auth and redirect to login
       useAuthStore.getState().logout();
-      window.location.href = '/auth/login';
+      if (!window.location.pathname.startsWith('/auth')) {
+        window.location.href = '/auth/login';
+      }
     }
     return Promise.reject(err);
   }

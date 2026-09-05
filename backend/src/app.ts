@@ -56,6 +56,7 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/auth", authRoutes); // backward compatibility alias
 app.use("/api/v1/customers", customersRoutes);
 app.use("/api/v1/catalog", catalogRoutes);
+app.use("/api/catalog", catalogRoutes); // backward compatibility alias
 app.use("/api/v1/discount-rules", discountRulesRoutes);
 app.use("/api/v1/quotes", quotesRoutes);
 app.use("/api/v1/approvals", approvalsRoutes);

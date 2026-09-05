@@ -19,6 +19,7 @@ export default function PipelineKanbanPage() {
             List View
           </button>
           <button className="odoo-btn odoo-btn-primary" onClick={() => navigate('/quotations/q-1')}>
+          <button className="odoo-btn odoo-btn-primary" onClick={() => navigate('/quotations/create')}>
             + Create Quotation
           </button>
         </div>

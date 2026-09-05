@@ -1,4 +1,5 @@
 import api from '../lib/axios';
+import { MOCK_PORTAL_QUOTE } from './mockData';
 
 /* ============================================================
    DealFlow360 API Services Layer (Connecting frontend to /api/v1)
@@ -171,16 +172,37 @@ export const billingApi = {
 // 9. Customer Portal API (Public Magic Link)
 export const portalApi = {
   getPortalQuote: async (token: string) => {
-    const res = await api.get(`/portal/quotes/${token}`);
-    return res.data;
+    try {
+      const res = await api.get(`/portal/quotes/${token}`);
+      return res.data;
+    } catch (err) {
+      if (import.meta.env.VITE_USE_MOCK_DATA !== 'false') {
+        return { success: true, data: MOCK_PORTAL_QUOTE };
+      }
+      throw err;
+    }
   },
   postComment: async (token: string, data: { quote_line_id?: number; message: string; counter_discount_pct?: number }) => {
-    const res = await api.post(`/portal/quotes/${token}/comments`, data);
-    return res.data;
+    try {
+      const res = await api.post(`/portal/quotes/${token}/comments`, data);
+      return res.data;
+    } catch (err) {
+      if (import.meta.env.VITE_USE_MOCK_DATA !== 'false') {
+        return { success: true, data: { id: Date.now(), ...data, created_at: new Date().toISOString() } };
+      }
+      throw err;
+    }
   },
   confirmPortalQuote: async (token: string) => {
-    const res = await api.post(`/portal/quotes/${token}/confirm`);
-    return res.data;
+    try {
+      const res = await api.post(`/portal/quotes/${token}/confirm`);
+      return res.data;
+    } catch (err) {
+      if (import.meta.env.VITE_USE_MOCK_DATA !== 'false') {
+        return { success: true, message: "Quotation confirmed successfully" };
+      }
+      throw err;
+    }
   },
 };
 

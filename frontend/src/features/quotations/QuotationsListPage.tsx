@@ -23,6 +23,7 @@ export default function QuotationsListPage() {
         <button
           className="odoo-btn odoo-btn-primary"
           onClick={() => navigate('/quotations/q-1')}
+          onClick={() => navigate('/quotations/create')}
         >
           + Create Quotation
         </button>

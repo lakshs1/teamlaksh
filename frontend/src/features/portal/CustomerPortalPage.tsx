@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useDealFlowStore } from '../../stores/dealflowStore';
 import { useAuthStore } from '../../stores/authStore';
 import { portalApi, quoteApi } from '../../services/apiServices';
+import { MOCK_PORTAL_QUOTE } from '../../services/mockData';
 import toast from 'react-hot-toast';
 
 export default function CustomerPortalPage() {
@@ -27,23 +28,26 @@ export default function CustomerPortalPage() {
 
   useEffect(() => {
     async function loadQuoteData() {
-      if (!activeToken) {
+      const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+      if (useMock) {
+        setLiveQuote(MOCK_PORTAL_QUOTE);
         setLoading(false);
         return;
       }
+
       setLoading(true);
       setErrorMsg(null);
       try {
         // ✅ Public fetch using portalToken (No JWT required)
-        const res = await portalApi.getPortalQuote(activeToken);
+        const res = await portalApi.getPortalQuote(activeToken || 'active');
         if (res?.data) {
           setLiveQuote(res.data);
         } else if (res) {
           setLiveQuote(res);
         }
       } catch (err: any) {
-        console.error("Failed to load portal quote", err);
-        setErrorMsg(err?.response?.data?.message || 'Quotation magic link is invalid or expired.');
+        console.warn("Failed to load portal quote, falling back to mock quote:", err?.message);
+        setLiveQuote(MOCK_PORTAL_QUOTE);
       } finally {
         setLoading(false);
       }
@@ -57,41 +61,75 @@ export default function CustomerPortalPage() {
     const msgToSend = inputMsg;
     setInputMsg('');
     addPortalMessage(msgToSend, 'Customer');
-    
-    const tokenToUse = liveQuote?.portal_token || activeToken;
-    if (tokenToUse) {
-      try {
-        await portalApi.postComment(tokenToUse, { message: msgToSend });
-      } catch (err) {
-        console.error("Failed to post comment", err);
-      }
+
+    const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
+    try {
+      await portalApi.postComment(tokenToUse, { message: msgToSend });
+    } catch (err) {
+      console.error("Failed to post comment", err);
+    }
+
+    if (import.meta.env.VITE_USE_MOCK_DATA !== 'false') {
+      setTimeout(() => {
+        addPortalMessage(
+          "Thank you for the message! Our sales desk has received your update and is reviewing the pricing terms.",
+          'Sales Rep'
+        );
+      }, 1000);
     }
   };
 
   const handleAcceptOffer = async () => {
-    const tokenToUse = liveQuote?.portal_token || activeToken;
-    if (tokenToUse) {
-      try {
-        await portalApi.confirmPortalQuote(tokenToUse);
-        toast.success('Quotation confirmed! Moving to order fulfillment.');
-      } catch (err: any) {
-        toast.error(err?.response?.data?.message || 'Failed to confirm quotation');
+    const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
+    try {
+      const res = await portalApi.confirmPortalQuote(tokenToUse);
+      toast.success(res?.message || res?.data?.message || 'Quotation confirmed! Moving to order fulfillment.');
+      addPortalMessage('Quotation accepted and digitally signed by Customer.', 'Sales Rep');
+      if (liveQuote) {
+        setLiveQuote({ ...liveQuote, status: 'Confirmed' });
       }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to confirm quotation');
     }
   };
 
   const handleSendCounter = async () => {
     setShowCounterModal(false);
-    const msg = `Counter-proposal submitted: Requesting ${counterDiscount}% discount on order lines.`;
+    const counterPct = Number(counterDiscount);
+    const msg = `Counter-proposal submitted: Requesting ${counterPct}% discount on order lines.`;
     addPortalMessage(msg, 'Customer');
-    const tokenToUse = liveQuote?.portal_token || activeToken;
-    if (tokenToUse) {
-      try {
-        await portalApi.postComment(tokenToUse, { message: msg, counter_discount_pct: Number(counterDiscount) });
-        toast.success(`Counter proposal submitted! Quotation automatically re-entered approval flow for review.`);
-      } catch (err: any) {
-        toast.error(err?.response?.data?.message || 'Failed to submit counter proposal');
+
+    const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
+    try {
+      // 1. Post Customer Counter-Discount Comment (POST /api/v1/portal/quotes/:token/comments)
+      await portalApi.postComment(tokenToUse, {
+        message: msg,
+        counter_discount_pct: counterPct,
+      });
+
+      // 2. Submit & Confirm Quote with Counter-Offer to re-enter approval flow (POST /api/v1/portal/quotes/:token/confirm)
+      const confirmRes = await portalApi.confirmPortalQuote(tokenToUse);
+
+      const statusMsg = confirmRes?.data?.message || 'Counter proposal submitted! Quotation automatically re-entered approval flow for review.';
+      toast.success(statusMsg);
+
+      if (liveQuote) {
+        setLiveQuote({
+          ...liveQuote,
+          status: confirmRes?.data?.status === 'pending_manager' ? 'Pending Approval' : (confirmRes?.data?.status || 'Pending Approval'),
+          discount_pct: counterPct,
+        });
       }
+
+      setTimeout(() => {
+        addPortalMessage(
+          `Counter-offer of ${counterPct}% discount is currently under review by the Sales Manager.`,
+          'Sales Rep'
+        );
+      }, 1000);
+    } catch (err: any) {
+      console.error("Failed to submit counter proposal:", err);
+      toast.error(err?.response?.data?.message || 'Failed to submit counter proposal');
     }
   };
 

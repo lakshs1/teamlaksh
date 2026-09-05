@@ -1,4 +1,14 @@
 import { create } from 'zustand';
+import {
+  MOCK_PRODUCTS,
+  MOCK_QUOTATIONS,
+  MOCK_APPROVALS,
+  MOCK_FULFILLMENTS,
+  MOCK_SUBSCRIPTIONS,
+  MOCK_INVOICES,
+  MOCK_DEAL_HEALTH_ALERTS,
+  MOCK_PORTAL_MESSAGES,
+} from '../services/mockData';
 
 export interface QuotationLine {
   id: string;
@@ -178,18 +188,19 @@ export interface DealFlowState {
   updateDiscountRules: (newRules: DiscountRule) => void;
   triggerDealNudge: (alertId: string) => void;
   addProduct: (prod: ProductItem) => void;
+  addQuotation: (quote: Quotation) => void;
 }
 
 export const useDealFlowStore = create<DealFlowState>((set) => ({
   currentRole: 'Sales Manager',
   setRole: (role) => set({ currentRole: role }),
-  quotations: [],
-  approvals: [],
-  fulfillments: [],
-  subscriptions: [],
-  invoices: [],
-  dealHealthAlerts: [],
-  products: [],
+  quotations: MOCK_QUOTATIONS,
+  approvals: MOCK_APPROVALS,
+  fulfillments: MOCK_FULFILLMENTS,
+  subscriptions: MOCK_SUBSCRIPTIONS,
+  invoices: MOCK_INVOICES,
+  dealHealthAlerts: MOCK_DEAL_HEALTH_ALERTS,
+  products: MOCK_PRODUCTS,
   discountRules: {
     customerTierCeilings: [
       { tier: 'Bronze', maxDiscount: 5 },
@@ -206,10 +217,16 @@ export const useDealFlowStore = create<DealFlowState>((set) => ({
       { discountRange: 'Over Limit, blended risk high', approvalRequired: 'Sales Manager then Finance' },
     ],
   },
-  portalMessages: [],
+  portalMessages: MOCK_PORTAL_MESSAGES,
 
   fetchLiveData: async () => {
-    // Dynamic live backend data loader
+    // If running in mock data mode (default for UI design & testing), keep our rich mock state
+    const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+    if (useMock) {
+      return;
+    }
+
+    // Dynamic live backend data loader (when VITE_USE_MOCK_DATA=false)
     try {
       const { quoteApi, catalogApi, approvalApi, billingApi, analyticsApi } = await import('../services/apiServices');
       
@@ -345,5 +362,9 @@ export const useDealFlowStore = create<DealFlowState>((set) => ({
 
   addProduct: (prod) => set((state) => ({
     products: [prod, ...state.products],
+  })),
+
+  addQuotation: (quote) => set((state) => ({
+    quotations: [quote, ...state.quotations],
   })),
 }));

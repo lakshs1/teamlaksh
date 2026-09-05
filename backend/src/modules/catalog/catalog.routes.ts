@@ -57,7 +57,7 @@ router.get(
 router.post(
   "/products",
   authenticate,
-  authorize("admin"),
+  authorize("admin", "manager"),
   validate({ body: createProductSchema }),
   catalogController.createProduct
 );

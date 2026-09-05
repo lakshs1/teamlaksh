@@ -10,6 +10,7 @@ const AuthPortalPage          = lazy(() => import('../features/auth/AuthPortalPa
 const SalesDashboardPage      = lazy(() => import('../features/dashboard/SalesDashboardPage'));
 const QuotationsListPage      = lazy(() => import('../features/quotations/QuotationsListPage'));
 const PipelineKanbanPage      = lazy(() => import('../features/quotations/PipelineKanbanPage'));
+const CreateQuotationPage     = lazy(() => import('../features/quotations/CreateQuotationPage'));
 const QuotationDetailPage     = lazy(() => import('../features/quotations/QuotationDetailPage'));
 const ApprovalsListPage       = lazy(() => import('../features/approvals/ApprovalsListPage'));
 const ApprovalDetailPage      = lazy(() => import('../features/approvals/ApprovalDetailPage'));
@@ -77,6 +78,8 @@ const router = createBrowserRouter([
     children: [
       { path: '/dashboard', element: <Suspense fallback={<PageLoader />}><SalesDashboardPage /></Suspense> },
       { path: '/quotations', element: <Suspense fallback={<PageLoader />}><QuotationsListPage /></Suspense> },
+      { path: '/quotations/create', element: <Suspense fallback={<PageLoader />}><CreateQuotationPage /></Suspense> },
+      { path: '/quotations/new', element: <Suspense fallback={<PageLoader />}><CreateQuotationPage /></Suspense> },
       { path: '/quotations/pipeline', element: <Suspense fallback={<PageLoader />}><PipelineKanbanPage /></Suspense> },
       { path: '/quotations/:id', element: <Suspense fallback={<PageLoader />}><QuotationDetailPage /></Suspense> },
       { path: '/approvals', element: <Suspense fallback={<PageLoader />}><ApprovalsListPage /></Suspense> },

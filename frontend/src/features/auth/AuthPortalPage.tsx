@@ -130,7 +130,7 @@ export default function AuthPortalPage() {
         if (Array.isArray(qList) && qList.length > 0) {
           portalTokenToUse = qList[0].portal_token || qList[0].portalToken;
         }
-      } catch {}
+      } catch { }
     }
 
     toast.success(`Customer account created for ${custNameReg}! Opening Customer Portal...`);
@@ -178,7 +178,7 @@ export default function AuthPortalPage() {
         if (Array.isArray(qList) && qList.length > 0) {
           portalTokenToUse = qList[0].portal_token || qList[0].portalToken;
         }
-      } catch {}
+      } catch { }
     }
 
     toast.success(`Logged in as Customer (${custEmail})`);
@@ -345,6 +345,20 @@ export default function AuthPortalPage() {
                   </p>
                 </div>
 
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px dashed #CBD5E1' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Demo Customer:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustEmail('customer@acme-corp.com');
+                      setCustPassword('password123');
+                    }}
+                    style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Quick-Fill Demo
+                  </button>
+                </div>
+
                 <form onSubmit={handleCustomerSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
@@ -412,6 +426,21 @@ export default function AuthPortalPage() {
                   <p style={{ fontSize: '0.8125rem', color: '#64748B' }}>
                     Log in with your organizational role credentials.
                   </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: 6, border: '1px dashed #CBD5E1' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Demo Sales Manager:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmpEmail('manager@dealflow360.dev');
+                      setEmpRole('Sales Manager');
+                      setEmpPassword('password123');
+                    }}
+                    style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Quick-Fill Manager ⚡
+                  </button>
                 </div>
 
                 <form onSubmit={handleEmployeeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

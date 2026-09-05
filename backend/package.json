@@ -8,6 +8,7 @@
     "start": "npx tsx src/index.ts",
     "build": "npx tsc",
     "tunnel": "npx tsx src/scripts/tunnel.ts",
+    "seed:demo": "npx tsx src/scripts/seed_demo_users.ts",
     "test": "npx tsx --test src/**/*.test.ts",
     "db:generate": "npm --prefix ../db run db:generate",
     "db:migrate": "npm --prefix ../db run db:migrate",

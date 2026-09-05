@@ -1,19 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDealFlowStore, type ProductItem } from '../../stores/dealflowStore';
 import toast from 'react-hot-toast';
 import { catalogApi } from '../../services/apiServices';
+import { MOCK_CATEGORIES } from '../../services/mockData';
+
+interface CategoryOption {
+  id: number;
+  name: string;
+  maxDiscountPct?: string | number;
+}
 
 export default function ProductCatalogPage() {
   const navigate = useNavigate();
-  const { products, addProduct } = useDealFlowStore();
+  const { products, addProduct, fetchLiveData } = useDealFlowStore();
   const [searchTerm, setSearchTerm] = useState('');
-  
+
+  // Dynamic categories from backend DB
+  const [categories, setCategories] = useState<CategoryOption[]>(MOCK_CATEGORIES);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | ''>(MOCK_CATEGORIES[0]?.id || 1);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+
   // New Product Modal State
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [prodName, setProdName] = useState('');
-  const [prodCategory, setProdCategory] = useState<'Hardware' | 'Accessories' | 'Services' | 'Subscriptions'>('Hardware');
   const [prodSku, setProdSku] = useState('');
   const [prodSalesPrice, setProdSalesPrice] = useState('');
   const [prodCostPrice, setProdCostPrice] = useState('');
@@ -23,20 +34,51 @@ export default function ProductCatalogPage() {
   const [recurringInterval, setRecurringInterval] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
   const [prodDescription, setProdDescription] = useState('');
 
+  // Load dynamic categories & live products on mount if not in pure mock mode
+  useEffect(() => {
+    let isMounted = true;
+    const loadCategories = async () => {
+      const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+      if (useMock) return;
+
+      setIsLoadingCategories(true);
+      try {
+        const res = await catalogApi.getCategories();
+        const fetchedCategories: CategoryOption[] = res?.data || [];
+        if (isMounted && fetchedCategories.length > 0) {
+          setCategories(fetchedCategories);
+          setSelectedCategoryId(fetchedCategories[0].id);
+        }
+      } catch (err: any) {
+        console.warn('Backend categories fetch failed, using mock categories:', err?.message);
+      } finally {
+        if (isMounted) setIsLoadingCategories(false);
+      }
+    };
+
+    loadCategories();
+    fetchLiveData?.();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchLiveData]);
+
+  const handleCategorySelect = (categoryId: number) => {
+    setSelectedCategoryId(categoryId);
+    const cat = categories.find((c) => c.id === categoryId);
+    if (cat?.name.toLowerCase().includes('subscri')) {
+      setIsRecurring(true);
+      setProdUnit('license');
+    }
+  };
+
   const filteredProducts = products.filter(
     (p) =>
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const handleCategoryChange = (cat: 'Hardware' | 'Accessories' | 'Services' | 'Subscriptions') => {
-    setProdCategory(cat);
-    if (cat === 'Subscriptions') {
-      setIsRecurring(true);
-      setProdUnit('license');
-    }
-  };
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,57 +87,56 @@ export default function ProductCatalogPage() {
       return;
     }
 
+    if (!selectedCategoryId) {
+      toast.error('Please select a product category');
+      return;
+    }
+
     setSubmitting(true);
+    const useMock = import.meta.env.VITE_USE_MOCK_DATA !== 'false';
+    const selectedCat = categories.find((c) => c.id === Number(selectedCategoryId));
     let createdProdFromDb: any = null;
 
-    try {
-      const categoryMap: Record<string, number> = {
-        Hardware: 1,
-        Software: 2,
-        Services: 3,
-        Subscriptions: 4,
-        Accessories: 1,
-      };
+    if (!useMock) {
+      try {
+        const res = await catalogApi.createProduct({
+          name: prodName.trim(),
+          description: prodDescription.trim() || 'New product item added to catalog.',
+          category_id: Number(selectedCategoryId),
+          base_price: Number(prodSalesPrice) || 0,
+          cost_price: Number(prodCostPrice) || 0,
+          unit: prodUnit.trim() || 'unit',
+          sku: prodSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+          tax_pct: 18,
+          is_recurring: isRecurring,
+          recurring_interval: isRecurring ? recurringInterval : undefined,
+          is_active: isActive,
+        });
 
-      const res = await catalogApi.createProduct({
-        name: prodName.trim(),
-        description: prodDescription.trim() || 'New product item added to catalog.',
-        category_id: categoryMap[prodCategory] || 1,
-        base_price: Number(prodSalesPrice) || 0,
-        cost_price: Number(prodCostPrice) || 0,
-        unit: prodUnit.trim() || 'unit',
-        sku: prodSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-        tax_pct: 18,
-        is_recurring: isRecurring,
-        recurring_interval: isRecurring ? recurringInterval : undefined,
-        is_active: isActive,
-      });
-
-      if (res?.data) {
-        createdProdFromDb = res.data;
+        if (res?.data) {
+          createdProdFromDb = res.data;
+        }
+      } catch (err: any) {
+        console.warn("Backend create product failed, adding to local catalog:", err?.message);
       }
-    } catch (err: any) {
-      console.warn("Backend DB create product call failed, using local store fallback:", err?.message);
-    } finally {
-      setSubmitting(false);
     }
 
     const newProd: ProductItem = {
       id: createdProdFromDb?.id ? String(createdProdFromDb.id) : `prod-${Date.now()}`,
       name: createdProdFromDb?.name || prodName.trim(),
       sku: createdProdFromDb?.sku || prodSku.trim() || `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-      category: prodCategory,
-      salesPrice: createdProdFromDb?.base_price !== undefined ? Number(createdProdFromDb.base_price) : (Number(prodSalesPrice) || 0),
-      costPrice: createdProdFromDb?.cost_price !== undefined ? Number(createdProdFromDb.cost_price) : (Number(prodCostPrice) || 0),
+      category: (selectedCat?.name as any) || 'Hardware',
+      salesPrice: createdProdFromDb?.basePrice !== undefined ? Number(createdProdFromDb.basePrice) : (Number(prodSalesPrice) || 0),
+      costPrice: createdProdFromDb?.costPrice !== undefined ? Number(createdProdFromDb.costPrice) : (Number(prodCostPrice) || 0),
       status: isActive ? 'Active' : 'Draft',
-      description: prodDescription.trim() || 'New product item added to catalog.',
+      description: createdProdFromDb?.description || prodDescription.trim() || 'New product item added to catalog.',
       canBeSold: true,
       canBePurchased: true,
     };
 
     addProduct(newProd);
-    toast.success(`Product "${newProd.name}" saved to database!`);
-    
+    toast.success(`Product "${newProd.name}" added to catalog!`);
+
     // Reset form
     setProdName('');
     setProdSku('');
@@ -107,6 +148,7 @@ export default function ProductCatalogPage() {
     setRecurringInterval('monthly');
     setProdDescription('');
     setShowModal(false);
+    setSubmitting(false);
   };
 
   return (
@@ -298,17 +340,25 @@ export default function ProductCatalogPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#334155', marginBottom: '0.3rem' }}>
-                    Category
+                    Category {isLoadingCategories && <span style={{ fontSize: '0.75rem', color: '#64748B' }}>(loading...)</span>}
                   </label>
                   <select
+                    id="prod-category-select"
                     className="odoo-input"
-                    value={prodCategory}
-                    onChange={(e) => handleCategoryChange(e.target.value as any)}
+                    value={selectedCategoryId}
+                    onChange={(e) => handleCategorySelect(Number(e.target.value))}
+                    disabled={isLoadingCategories || categories.length === 0}
+                    required
                   >
-                    <option value="Hardware">Hardware</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Services">Services</option>
-                    <option value="Subscriptions">Subscriptions</option>
+                    {categories.length === 0 ? (
+                      <option value="">{isLoadingCategories ? "Loading categories from DB..." : "No categories available"}</option>
+                    ) : (
+                      categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
