@@ -1,7 +1,7 @@
 // Shared TypeScript types for the hackathon template
 
 /* ---- Enums ---- */
-export type UserRole   = 'USER' | 'MANAGER' | 'ADMIN';
+export type UserRole   = 'USER' | 'MANAGER' | 'ADMIN' | 'customer' | 'rep';
 export type UserStatus = 'ACTIVE' | 'BANNED';
 
 /* ---- User ---- */

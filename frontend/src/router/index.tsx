@@ -64,6 +64,10 @@ const router = createBrowserRouter([
 
   // Isolated Customer Portal (B8)
   {
+    path: '/portal',
+    element: <Suspense fallback={<PageLoader />}><CustomerPortalPage /></Suspense>,
+  },
+  {
     path: '/portal/:portalToken',
     element: <Suspense fallback={<PageLoader />}><CustomerPortalPage /></Suspense>,
   },

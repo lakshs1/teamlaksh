@@ -44,9 +44,10 @@ export default function LoginPage() {
       setAuth(user, token);
 
       if (redirectTo) navigate(redirectTo);
+      else if (user.role === 'customer') navigate('/portal');
       else if (user.role === 'MANAGER') navigate('/dashboard');
       else if (user.role === 'ADMIN') navigate('/admin');
-      else navigate('/');
+      else navigate('/dashboard');
     } catch (err: any) {
       const msg = err?.response?.data?.message || err.message || 'Login failed';
       toast.error(msg);

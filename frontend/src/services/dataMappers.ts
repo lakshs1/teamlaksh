@@ -259,12 +259,15 @@ export function mapAuthUser(u: any) {
 const ROLE_BACKEND_TO_FRONTEND: Record<string, string> = {
   admin: 'ADMIN',
   manager: 'MANAGER',
-  rep: 'USER',
+  rep: 'rep',
+  customer: 'customer',
   finance: 'MANAGER',
   operations: 'USER',
 };
 
-export function mapRole(backendRole: string): 'USER' | 'MANAGER' | 'ADMIN' {
-  return (ROLE_BACKEND_TO_FRONTEND[backendRole] || 'USER') as 'USER' | 'MANAGER' | 'ADMIN';
+export function mapRole(backendRole: string): 'USER' | 'MANAGER' | 'ADMIN' | 'customer' | 'rep' {
+  if (backendRole === 'customer') return 'customer';
+  if (backendRole === 'rep') return 'rep';
+  return (ROLE_BACKEND_TO_FRONTEND[backendRole] || 'USER') as 'USER' | 'MANAGER' | 'ADMIN' | 'customer' | 'rep';
 }
 

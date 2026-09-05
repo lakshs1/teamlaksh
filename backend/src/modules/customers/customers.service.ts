@@ -143,6 +143,7 @@ export async function createCustomer(data: {
     throw ApiError.conflict(`Customer with email '${data.email}' already exists`);
   }
 
+  let finalTierId = data.tier_id || null;
   if (data.tier_id) {
     const [tier] = await db
       .select()
@@ -153,6 +154,15 @@ export async function createCustomer(data: {
     if (!tier) {
       throw ApiError.badRequest(`Customer tier ID ${data.tier_id} does not exist`);
     }
+  } else {
+    const [bronzeTier] = await db
+      .select()
+      .from(customerTiers)
+      .where(eq(customerTiers.name, "Bronze"))
+      .limit(1);
+    if (bronzeTier) {
+      finalTierId = bronzeTier.id;
+    }
   }
 
   const [customer] = await db
@@ -160,7 +170,7 @@ export async function createCustomer(data: {
     .values({
       name: data.name,
       email: data.email,
-      tierId: data.tier_id || null,
+      tierId: finalTierId,
     })
     .returning();
 

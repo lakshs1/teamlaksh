@@ -20,7 +20,7 @@ const idParamSchema = z.object({
 });
 
 // ── Categories ──────────────────────────────────────────────
-router.get("/categories", authenticate, catalogController.getCategories);
+router.get("/categories", catalogController.getCategories);
 router.post(
   "/categories",
   authenticate,
@@ -49,7 +49,6 @@ router.post(
 // ── Products ────────────────────────────────────────────────
 router.get(
   "/products",
-  authenticate,
   validate({ query: productQuerySchema }),
   catalogController.listProducts
 );
@@ -64,7 +63,6 @@ router.post(
 
 router.get(
   "/products/:id",
-  authenticate,
   validate({ params: idParamSchema }),
   catalogController.getProductById
 );
