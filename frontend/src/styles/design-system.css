@@ -228,15 +228,203 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ============================================================
-   Responsive Breakpoints (use in CSS Modules via @media)
-   ============================================================
+   Odoo DealFlow360 Design System Classes
+   ============================================================ */
 
-   Mobile:  < 768px
-   Tablet:  768px - 1024px
-   Desktop: > 1024px
+.odoo-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  font-family: 'Inter', system-ui, sans-serif;
+}
 
-   Usage in a CSS Module:
-   @media (max-width: 767px) { .myClass { ... } }
-   @media (min-width: 768px) and (max-width: 1023px) { ... }
-   @media (min-width: 1024px) { ... }
-============================================================= */
+.odoo-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.odoo-page-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #1F2937;
+  letter-spacing: -0.02em;
+}
+
+.odoo-card {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.odoo-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  border: 1px solid transparent;
+}
+
+.odoo-btn-primary {
+  background-color: #714B67;
+  color: #FFFFFF;
+  border-color: #714B67;
+}
+.odoo-btn-primary:hover {
+  background-color: #5B3A52;
+  border-color: #5B3A52;
+}
+
+.odoo-btn-secondary {
+  background-color: #FFFFFF;
+  color: #334155;
+  border-color: #CBD5E1;
+}
+.odoo-btn-secondary:hover {
+  background-color: #F8F9FA;
+  border-color: #94A3B8;
+}
+
+.odoo-btn-danger {
+  background-color: #EF4444;
+  color: #FFFFFF;
+  border-color: #EF4444;
+}
+.odoo-btn-danger:hover {
+  background-color: #DC2626;
+  border-color: #DC2626;
+}
+
+.odoo-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: #1F2937;
+  background-color: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 150ms ease;
+}
+.odoo-input:focus {
+  border-color: #714B67;
+  box-shadow: 0 0 0 3px rgba(113, 75, 103, 0.12);
+}
+
+.odoo-table-container {
+  background-color: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.odoo-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.8125rem;
+}
+.odoo-table th {
+  background-color: #F8F9FA;
+  color: #64748B;
+  font-weight: 700;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #E2E8F0;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+.odoo-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #F1F5F9;
+  color: #334155;
+  vertical-align: middle;
+}
+.odoo-table tr:last-child td {
+  border-bottom: none;
+}
+.odoo-table tr:hover td {
+  background-color: rgba(113, 75, 103, 0.02);
+}
+
+.odoo-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 20px;
+  background-color: rgba(113, 75, 103, 0.1);
+  color: #714B67;
+}
+
+.odoo-top-nav {
+  background-color: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  font-family: 'Inter', system-ui, sans-serif;
+  sticky: top;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.odoo-brand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.odoo-brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+
+.odoo-brand-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background-color: #714B67;
+  color: #FFFFFF;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.odoo-menu-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 1.5rem;
+  overflow-x: auto;
+}
+
+.odoo-menu-item {
+  padding: 0.65rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748B;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: all 150ms ease;
+  white-space: nowrap;
+}
+.odoo-menu-item:hover {
+  color: #714B67;
+}
+.odoo-menu-item.active {
+  color: #714B67;
+  border-bottom-color: #714B67;
+}
+

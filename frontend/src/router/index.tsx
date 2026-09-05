@@ -1,93 +1,122 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import { RoleRoute, PublicOnlyRoute } from './guards';
-
-/* ---- Lazy page imports (code splitting per route) ---- */
-
-// Auth
-const LoginPage    = lazy(() => import('../features/auth/LoginPage'));
-const RegisterPage = lazy(() => import('../features/auth/RegisterPage'));
-
-// Public / User
-const HomePage      = lazy(() => import('../features/home/HomePage'));
-const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage'));
-const ProfilePage   = lazy(() => import('../features/profile/ProfilePage'));
-
-// Admin
-const AdminDashboardPage = lazy(() => import('../features/admin/AdminDashboardPage'));
-const AdminUsersPage     = lazy(() => import('../features/admin/AdminUsersPage'));
-const AdminSettingsPage  = lazy(() => import('../features/admin/AdminSettingsPage'));
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 
 // Layouts
-const AuthLayout  = lazy(() => import('../components/layout/AuthLayout'));
-const UserLayout  = lazy(() => import('../components/layout/UserLayout'));
-const AdminLayout = lazy(() => import('../components/layout/AdminLayout'));
+const UserLayout    = lazy(() => import('../components/layout/UserLayout'));
+const BackendLayout = lazy(() => import('../components/layout/BackendLayout'));
 
-// Fallback for lazy loading
+// Lazy Pages for DealFlow360
+const AuthPortalPage          = lazy(() => import('../features/auth/AuthPortalPage'));
+const SalesDashboardPage      = lazy(() => import('../features/dashboard/SalesDashboardPage'));
+const QuotationsListPage      = lazy(() => import('../features/quotations/QuotationsListPage'));
+const PipelineKanbanPage      = lazy(() => import('../features/quotations/PipelineKanbanPage'));
+const QuotationDetailPage     = lazy(() => import('../features/quotations/QuotationDetailPage'));
+const ApprovalsListPage       = lazy(() => import('../features/approvals/ApprovalsListPage'));
+const ApprovalDetailPage      = lazy(() => import('../features/approvals/ApprovalDetailPage'));
+const FulfillmentListPage     = lazy(() => import('../features/fulfillment/FulfillmentListPage'));
+const FulfillmentDetailPage   = lazy(() => import('../features/fulfillment/FulfillmentDetailPage'));
+const FulfillmentStockPage    = lazy(() => import('../features/fulfillment/FulfillmentStockPage'));
+const SubscriptionsListPage   = lazy(() => import('../features/subscriptions/SubscriptionsListPage'));
+const SubscriptionDetailPage  = lazy(() => import('../features/subscriptions/SubscriptionDetailPage'));
+const CustomerPortalPage      = lazy(() => import('../features/portal/CustomerPortalPage'));
+const InvoicesListPage        = lazy(() => import('../features/invoices/InvoicesListPage'));
+const InvoiceDetailPage       = lazy(() => import('../features/invoices/InvoiceDetailPage'));
+const DealHealthDashboardPage = lazy(() => import('../features/dealhealth/DealHealthDashboardPage'));
+const ProductCatalogPage      = lazy(() => import('../features/products/ProductCatalogPage'));
+const ProductDetailPage       = lazy(() => import('../features/products/ProductDetailPage'));
+const DiscountRulesPage       = lazy(() => import('../features/settings/DiscountRulesPage'));
+const WarehouseSetupPage      = lazy(() => import('../features/settings/WarehouseSetupPage'));
+const SubscriptionPlansSetupPage = lazy(() => import('../features/settings/SubscriptionPlansSetupPage'));
+const UpsellRulesSetupPage    = lazy(() => import('../features/settings/UpsellRulesSetupPage'));
+const ReportsPage             = lazy(() => import('../features/reports/ReportsPage'));
+
+// Fallback loader
 const PageLoader = () => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-    <div style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTopColor: '#714B67', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: '#F8F9FA' }}>
+    <div style={{ width: 40, height: 40, border: '3px solid #E2E8F0', borderTopColor: '#714B67', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
   </div>
 );
 
-/* ---- Router Config ---- */
 const router = createBrowserRouter([
-  /* =========== AUTH (public only) =========== */
+  // Launch / Authentication Routes (Dual Portal: Employee vs Customer)
   {
-    element: <PublicOnlyRoute />,
-    children: [
-      {
-        element: <Suspense fallback={<PageLoader />}><AuthLayout /></Suspense>,
-        children: [
-          { path: '/auth/login',    element: <Suspense fallback={<PageLoader />}><LoginPage /></Suspense> },
-          { path: '/auth/register', element: <Suspense fallback={<PageLoader />}><RegisterPage /></Suspense> },
-        ],
-      },
-    ],
+    path: '/',
+    element: <Suspense fallback={<PageLoader />}><AuthPortalPage /></Suspense>,
+  },
+  {
+    path: '/login',
+    element: <Suspense fallback={<PageLoader />}><AuthPortalPage /></Suspense>,
+  },
+  {
+    path: '/auth/login',
+    element: <Suspense fallback={<PageLoader />}><AuthPortalPage /></Suspense>,
+  },
+  {
+    path: '/register',
+    element: <Suspense fallback={<PageLoader />}><AuthPortalPage /></Suspense>,
+  },
+  {
+    path: '/auth/register',
+    element: <Suspense fallback={<PageLoader />}><AuthPortalPage /></Suspense>,
   },
 
-  /* =========== USER ROUTES =========== */
+  // Isolated Customer Portal (B8)
+  {
+    path: '/portal/:portalToken',
+    element: <Suspense fallback={<PageLoader />}><CustomerPortalPage /></Suspense>,
+  },
+  {
+    path: '/portal/quotation/:portalToken',
+    element: <Suspense fallback={<PageLoader />}><CustomerPortalPage /></Suspense>,
+  },
+
+  // Part B: Sales Frontend (Rep Workspace Experience - B1 to B9)
   {
     element: <Suspense fallback={<PageLoader />}><UserLayout /></Suspense>,
     children: [
-      /* Public pages */
-      { path: '/', element: <Suspense fallback={<PageLoader />}><HomePage /></Suspense> },
-
-      /* Protected user pages */
-      {
-        element: <RoleRoute allowedRoles={['USER', 'MANAGER']} />,
-        children: [
-          { path: '/dashboard', element: <Suspense fallback={<PageLoader />}><DashboardPage /></Suspense> },
-          { path: '/profile',   element: <Suspense fallback={<PageLoader />}><ProfilePage /></Suspense> },
-        ],
-      },
+      { path: '/dashboard', element: <Suspense fallback={<PageLoader />}><SalesDashboardPage /></Suspense> },
+      { path: '/quotations', element: <Suspense fallback={<PageLoader />}><QuotationsListPage /></Suspense> },
+      { path: '/quotations/pipeline', element: <Suspense fallback={<PageLoader />}><PipelineKanbanPage /></Suspense> },
+      { path: '/quotations/:id', element: <Suspense fallback={<PageLoader />}><QuotationDetailPage /></Suspense> },
+      { path: '/approvals', element: <Suspense fallback={<PageLoader />}><ApprovalsListPage /></Suspense> },
+      { path: '/approvals/:id', element: <Suspense fallback={<PageLoader />}><ApprovalDetailPage /></Suspense> },
+      { path: '/fulfillment', element: <Suspense fallback={<PageLoader />}><FulfillmentListPage /></Suspense> },
+      { path: '/fulfillment/:id', element: <Suspense fallback={<PageLoader />}><FulfillmentDetailPage /></Suspense> },
+      { path: '/fulfillment/:id/stock', element: <Suspense fallback={<PageLoader />}><FulfillmentStockPage /></Suspense> },
+      { path: '/subscriptions', element: <Suspense fallback={<PageLoader />}><SubscriptionsListPage /></Suspense> },
+      { path: '/subscriptions/:id', element: <Suspense fallback={<PageLoader />}><SubscriptionDetailPage /></Suspense> },
+      { path: '/invoices', element: <Suspense fallback={<PageLoader />}><InvoicesListPage /></Suspense> },
+      { path: '/invoices/:id', element: <Suspense fallback={<PageLoader />}><InvoiceDetailPage /></Suspense> },
+      { path: '/deal-health', element: <Suspense fallback={<PageLoader />}><DealHealthDashboardPage /></Suspense> },
+      { path: '/products', element: <Suspense fallback={<PageLoader />}><ProductCatalogPage /></Suspense> },
+      { path: '/products/:id', element: <Suspense fallback={<PageLoader />}><ProductDetailPage /></Suspense> },
+      { path: '/settings/discount-rules', element: <Suspense fallback={<PageLoader />}><DiscountRulesPage /></Suspense> },
     ],
   },
 
-  /* =========== ADMIN ROUTES =========== */
+  // Part A: Sales Backend (Configuration Area - A1 to A7)
   {
-    element: <RoleRoute allowedRoles={['ADMIN']} />,
+    element: <Suspense fallback={<PageLoader />}><BackendLayout /></Suspense>,
     children: [
-      {
-        element: <Suspense fallback={<PageLoader />}><AdminLayout /></Suspense>,
-        children: [
-          { path: '/admin',          element: <Suspense fallback={<PageLoader />}><AdminDashboardPage /></Suspense> },
-          { path: '/admin/users',    element: <Suspense fallback={<PageLoader />}><AdminUsersPage /></Suspense> },
-          { path: '/admin/settings', element: <Suspense fallback={<PageLoader />}><AdminSettingsPage /></Suspense> },
-        ],
-      },
+      { path: '/backend', element: <Navigate to="/backend/products" replace /> },
+      { path: '/backend/products', element: <Suspense fallback={<PageLoader />}><ProductCatalogPage /></Suspense> },
+      { path: '/backend/discount-rules', element: <Suspense fallback={<PageLoader />}><DiscountRulesPage /></Suspense> },
+      { path: '/backend/warehouses', element: <Suspense fallback={<PageLoader />}><WarehouseSetupPage /></Suspense> },
+      { path: '/backend/subscription-plans', element: <Suspense fallback={<PageLoader />}><SubscriptionPlansSetupPage /></Suspense> },
+      { path: '/backend/upsell-rules', element: <Suspense fallback={<PageLoader />}><UpsellRulesSetupPage /></Suspense> },
+      { path: '/backend/reports', element: <Suspense fallback={<PageLoader />}><ReportsPage /></Suspense> },
     ],
   },
 
-  /* =========== 404 =========== */
+  // 404 Catch-All
   {
     path: '*',
     element: (
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100vh', gap:16, fontFamily:'Inter, sans-serif' }}>
         <div style={{ fontSize: 64, fontWeight: 800, color: '#714B67' }}>404</div>
-        <div style={{ fontSize: 20, color: '#6b7280' }}>Page not found</div>
-        <a href="/" style={{ color: '#714B67', fontWeight: 600 }}>← Back to Home</a>
+        <div style={{ fontSize: 20, color: '#64748B' }}>Page not found</div>
+        <a href="/" style={{ color: '#714B67', fontWeight: 600 }}>← Back to Portal</a>
       </div>
     ),
   },
