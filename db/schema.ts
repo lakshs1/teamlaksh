@@ -18,7 +18,7 @@ import { z } from "zod";
 // 1. USERS & ROLES
 // ============================================================================
 
-export const USER_ROLES = ["admin", "manager", "rep", "finance", "operations"] as const;
+export const USER_ROLES = ["admin", "manager", "rep", "finance_operations", "finance", "operations", "customer"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const users = pgTable("users", {
@@ -26,7 +26,7 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password"),
-  role: varchar("role", { length: 50 }).notNull().default("rep"), // admin | manager | rep | finance | operations
+  role: varchar("role", { length: 50 }).notNull().default("rep"), // admin | manager | rep | finance_operations | finance | operations | customer
   avatarUrl: text("avatar_url"),
   githubUrl: text("github_url"),
   refreshToken: text("refresh_token"),

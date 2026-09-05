@@ -7,7 +7,10 @@ import {
   listInvoices,
   getInvoiceById,
   markInvoicePaid,
+  createCreditNote,
+  createInvoice,
 } from "./billing.service.js";
+
 import {
   subscriptionQuerySchema,
   updateSubscriptionSchema,
@@ -90,3 +93,43 @@ export async function payInvoiceHandler(req: Request, res: Response, next: NextF
     next(err);
   }
 }
+
+export async function createCreditNoteHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = req.params.id ? Number(req.params.id) : undefined;
+    const { amount, reason, notes, customer_id, quote_id } = req.body;
+    if (!amount || amount <= 0) throw ApiError.badRequest("Valid positive amount required");
+    const result = await createCreditNote({
+      invoice_id: id,
+      customer_id,
+      quote_id,
+      amount: Number(amount),
+      reason: reason || "Adjustment / SLA Credit",
+      notes,
+    });
+    res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createInvoiceHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { customer_id, quote_id, subtotal, tax, total, type, due_date } = req.body;
+    if (!customer_id) throw ApiError.badRequest("Customer ID required");
+    if (!subtotal || subtotal <= 0) throw ApiError.badRequest("Valid subtotal required");
+    const data = await createInvoice({
+      customer_id: Number(customer_id),
+      quote_id: quote_id ? Number(quote_id) : undefined,
+      subtotal: Number(subtotal),
+      tax: tax ? Number(tax) : undefined,
+      total: total ? Number(total) : undefined,
+      type: type || "one_time",
+      due_date: due_date ? new Date(due_date) : undefined,
+    });
+    res.status(201).json({ success: true, data, message: "Invoice created successfully" });
+  } catch (err) {
+    next(err);
+  }
+}
+

@@ -15,14 +15,15 @@ export default function OdooNavbar() {
 
   // Internal workspace menu links
   const allNavItems = [
-    { label: 'Dashboard', path: '/dashboard', roles: ['Sales Rep', 'Sales Manager', 'Finance', 'Operations', 'Admin'] },
+    { label: 'Dashboard', path: '/dashboard', roles: ['Sales Rep', 'Sales Manager', 'Finance & Operations', 'Finance', 'Operations', 'Admin'] },
     { label: 'Quotations', path: '/quotations', roles: ['Sales Rep', 'Sales Manager', 'Admin'] },
     { label: 'Pipeline', path: '/quotations/pipeline', roles: ['Sales Rep', 'Sales Manager', 'Admin'] },
-    { label: 'Approvals', path: '/approvals', roles: ['Sales Manager', 'Finance', 'Admin'] },
-    { label: 'Fulfillment', path: '/fulfillment', roles: ['Sales Rep', 'Operations', 'Admin'] },
-    { label: 'Subscriptions', path: '/subscriptions', roles: ['Sales Rep', 'Finance', 'Operations', 'Admin'] },
-    { label: 'Invoices', path: '/invoices', roles: ['Finance', 'Admin'] },
+    { label: 'Approvals', path: '/approvals', roles: ['Sales Manager', 'Finance & Operations', 'Finance', 'Operations', 'Admin'] },
+    { label: 'Fulfillment', path: '/fulfillment', roles: ['Sales Rep', 'Finance & Operations', 'Operations', 'Admin'] },
+    { label: 'Subscriptions', path: '/subscriptions', roles: ['Sales Rep', 'Finance & Operations', 'Finance', 'Operations', 'Admin'] },
+    { label: 'Invoices', path: '/invoices', roles: ['Finance & Operations', 'Finance', 'Admin'] },
     { label: 'Deal Health', path: '/deal-health', roles: ['Sales Manager', 'Admin'] },
+    { label: 'Discount Rules', path: '/settings/discount-rules', roles: ['Sales Manager', 'Admin'] },
   ];
 
   const navItems = allNavItems.filter((item) => item.roles.includes(currentRole));
@@ -168,8 +169,7 @@ export default function OdooNavbar() {
             >
               <option value="Sales Rep">Sales Rep</option>
               <option value="Sales Manager">Sales Manager</option>
-              <option value="Finance">Finance</option>
-              <option value="Operations">Operations</option>
+              <option value="Finance & Operations">Finance & Operations</option>
               <option value="Admin">Admin</option>
             </select>
           </div>

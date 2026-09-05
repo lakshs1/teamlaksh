@@ -26,13 +26,13 @@ router.get("/quotes/:quoteId/split", authenticate, getWarehouseSplitHandler);
 router.post(
   "/quotes/:quoteId/split/accept",
   authenticate,
-  authorize("rep", "finance", "operations", "admin"),
+  authorize("rep", "finance", "operations", "finance_operations", "admin"),
   acceptWarehouseSplitHandler
 );
 router.post(
   "/quotes/:quoteId/split/override",
   authenticate,
-  authorize("rep", "finance", "operations", "admin"),
+  authorize("rep", "finance", "operations", "finance_operations", "admin"),
   validate({ body: manualSplitOverrideSchema }),
   overrideWarehouseSplitHandler
 );
@@ -60,7 +60,7 @@ router.get("/warehouses", authenticate, listWarehousesHandler);
 router.post(
   "/warehouses",
   authenticate,
-  authorize("admin", "operations"),
+  authorize("admin", "operations", "finance", "finance_operations"),
   validate({ body: createWarehouseSchema }),
   createWarehouseHandler
 );
@@ -70,7 +70,7 @@ router.get("/warehouses/:id/stock", authenticate, getWarehouseStockHandler);
 router.post(
   "/warehouses/:id/stock",
   authenticate,
-  authorize("admin", "operations"),
+  authorize("admin", "operations", "finance", "finance_operations"),
   validate({ body: updateStockSchema }),
   updateWarehouseStockHandler
 );

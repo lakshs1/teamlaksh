@@ -42,7 +42,7 @@ export default function AuthPortalPage() {
           name: empName,
           email: empEmail,
           password: empPassword,
-          role: empRole === 'Sales Rep' ? 'rep' : empRole === 'Sales Manager' ? 'manager' : empRole.toLowerCase(),
+          role: empRole === 'Sales Rep' ? 'rep' : empRole === 'Sales Manager' ? 'manager' : empRole === 'Finance & Operations' || empRole === 'Finance' || empRole === 'Operations' ? 'finance_operations' : empRole.toLowerCase(),
         });
         if (res?.data?.accessToken && res?.data?.user) {
           setAuth(res.data.user, res.data.accessToken);
@@ -162,11 +162,7 @@ export default function AuthPortalPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#714B67', letterSpacing: '-0.5px' }}>odoo</span>
           <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#334155' }}>DealFlow360</span>
-          <span className="odoo-badge">Sales Operations Engine</span>
         </div>
-        <span style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 500 }}>
-          Dual Access Authentication Portal
-        </span>
       </header>
 
       {/* Crisp White 2-Partition Main Split View */}
@@ -478,8 +474,7 @@ export default function AuthPortalPage() {
                     >
                       <option value="Sales Rep">Sales Rep (Quotations & Upsells)</option>
                       <option value="Sales Manager">Sales Manager (Approvals & Deal Health)</option>
-                      <option value="Finance">Finance (Invoices, Billing & Risk Level 2)</option>
-                      <option value="Operations">Operations (Fulfillment & Warehouses)</option>
+                      <option value="Finance & Operations">Finance & Operations (Fulfillment, Invoices, Billing & Risk Level 2)</option>
                       <option value="Admin">Admin (Full System Config)</option>
                     </select>
                   </div>
@@ -681,8 +676,7 @@ export default function AuthPortalPage() {
                         >
                           <option value="Sales Rep">Sales Rep (Quotations & Upsells)</option>
                           <option value="Sales Manager">Sales Manager (Approvals & Deal Health)</option>
-                          <option value="Finance">Finance (Invoices, Billing & Risk Level 2)</option>
-                          <option value="Operations">Operations (Fulfillment & Warehouses)</option>
+                          <option value="Finance & Operations">Finance & Operations (Fulfillment, Invoices, Billing & Risk Level 2)</option>
                           <option value="Admin">Admin (Full System Config)</option>
                         </select>
                       </div>

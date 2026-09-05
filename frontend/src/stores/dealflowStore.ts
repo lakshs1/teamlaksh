@@ -178,7 +178,7 @@ export interface PortalChatMessage {
   text: string;
 }
 
-export type UserRole = 'Sales Rep' | 'Sales Manager' | 'Finance' | 'Operations' | 'Admin';
+export type UserRole = 'Sales Rep' | 'Sales Manager' | 'Finance & Operations' | 'Finance' | 'Operations' | 'Admin';
 
 export interface DealFlowState {
   currentRole: UserRole;

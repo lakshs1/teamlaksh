@@ -21,7 +21,7 @@ export const registerSchema = z
       .min(2, "Name must be at least 2 characters")
       .openapi({ example: "Jane Sales" }),
     role: z
-      .enum(["admin", "manager", "rep", "finance", "operations", "customer"])
+      .enum(["admin", "manager", "rep", "finance_operations", "finance", "operations", "customer"])
       .default("rep")
       .openapi({ example: "rep" }),
   })
@@ -42,7 +42,7 @@ export const refreshSchema = z
 
 export const roleSelectSchema = z
   .object({
-    role: z.enum(["admin", "manager", "rep", "finance", "operations", "customer"]).openapi({ example: "manager" }),
+    role: z.enum(["admin", "manager", "rep", "finance_operations", "finance", "operations", "customer"]).openapi({ example: "manager" }),
   })
   .openapi("RoleSelectRequest");
 

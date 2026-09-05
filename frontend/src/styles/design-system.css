@@ -304,8 +304,11 @@ h1, h2, h3, h4, h5, h6 {
   border-color: #DC2626;
 }
 
-.odoo-input {
+.odoo-input,
+.odoo-select,
+select.odoo-input {
   width: 100%;
+  box-sizing: border-box;
   padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
   color: #1F2937;
@@ -314,11 +317,15 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 6px;
   outline: none;
   transition: border-color 150ms ease;
+  max-width: 100%;
 }
-.odoo-input:focus {
+.odoo-input:focus,
+.odoo-select:focus,
+select.odoo-input:focus {
   border-color: #714B67;
   box-shadow: 0 0 0 3px rgba(113, 75, 103, 0.12);
 }
+
 
 .odoo-table-container {
   background-color: #FFFFFF;

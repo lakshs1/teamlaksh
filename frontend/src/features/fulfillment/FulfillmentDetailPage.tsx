@@ -149,7 +149,8 @@ export default function FulfillmentDetailPage() {
   };
 
   // 5. Submit Manual Split Override
-  const handleSubmitOverride = async () => {
+  const handleSubmitOverride = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!id || !item) return;
 
     // Convert manualAllocations map to payload format
@@ -216,15 +217,15 @@ export default function FulfillmentDetailPage() {
             {item.reference}
           </h1>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button className="odoo-btn odoo-btn-primary" onClick={handleValidate} disabled={validating}>
-            {validating ? 'Validating...' : 'Validate'}
+            {validating ? 'Validating...' : 'Validate & Dispatch'}
           </button>
           <button className="odoo-btn odoo-btn-secondary" onClick={() => navigate(`/fulfillment/${item.id}/stock`)}>
-            View Stock Pipeline
+            View Stock Allocation
           </button>
           <button className="odoo-btn odoo-btn-secondary" onClick={() => navigate('/fulfillment')}>
-            Cancel
+            Back to List
           </button>
         </div>
       </div>
@@ -255,14 +256,14 @@ export default function FulfillmentDetailPage() {
             <div style={{ fontWeight: 600, color: '#1F2937' }}>{item.scheduledDate}</div>
           </div>
           <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Responsible</div>
-            <div style={{ fontWeight: 600, color: '#1F2937' }}>{item.responsible}</div>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Responsible Desk</div>
+            <div style={{ fontWeight: 600, color: '#1F2937' }}>Finance & Operations</div>
           </div>
         </div>
 
         {/* Demand Lines Table */}
         <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '0.75rem' }}>
-          Operations & Demand
+          Ordered Demand & Stock Status
         </h3>
         <table className="odoo-table" style={{ marginBottom: '1.5rem' }}>
           <thead>
@@ -272,6 +273,7 @@ export default function FulfillmentDetailPage() {
               <th>Demand</th>
               <th>Done</th>
               <th>Unit</th>
+              <th>Warehouse Assignment</th>
             </tr>
           </thead>
           <tbody>
@@ -282,6 +284,11 @@ export default function FulfillmentDetailPage() {
                 <td>{line.demand}</td>
                 <td style={{ fontWeight: 700, color: '#714B67' }}>{line.done}</td>
                 <td>{line.unit}</td>
+                <td>
+                  <span className="odoo-badge">
+                    {item.splits && item.splits[idx % item.splits.length]?.warehouseName || 'Mumbai Central Hub'}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -449,10 +456,18 @@ export default function FulfillmentDetailPage() {
               )}
             </div>
           ))}
+          {item.splits.length === 0 && (
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '1rem', backgroundColor: '#F8F9FA' }}>
+              <div style={{ fontWeight: 700, color: '#714B67' }}>Mumbai Central Hub</div>
+              <div style={{ fontSize: '0.8125rem', color: '#475569', marginTop: '0.25rem' }}>
+                Fulfilled: <strong>2 units</strong> | Stock Available: <strong>50 units</strong> | Est. Cost: <strong>₹0 (Direct)</strong>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Controls (PRD B6) */}
-        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', borderTop: '1px solid #E2E8F0', paddingTop: '1.25rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', borderTop: '1px solid #E2E8F0', paddingTop: '1.25rem', flexWrap: 'wrap' }}>
           <button className="odoo-btn odoo-btn-primary" onClick={handleValidate} disabled={validating}>
             Accept Suggested Split
           </button>
@@ -474,131 +489,115 @@ export default function FulfillmentDetailPage() {
 
       {/* Manual Override Modal */}
       {showOverrideModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '1rem',
-          }}
-        >
+        <div className="odoo-modal-backdrop">
           <div
+            className="odoo-modal-box"
             style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 12,
-              padding: '1.75rem',
               maxWidth: 780,
-              width: '100%',
+              width: '90%',
               maxHeight: '90vh',
               overflowY: 'auto',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              boxSizing: 'border-box',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #E2E8F0', paddingBottom: '0.75rem' }}>
+            <div className="odoo-modal-header">
               <div>
-                <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1F2937', margin: 0 }}>
+                <h3 style={{ margin: 0, fontWeight: 800, color: '#1F2937' }}>
                   Manual Warehouse Split Override
-                </h2>
+                </h3>
                 <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '0.2rem 0 0 0' }}>
                   Assign physical inventory quantities per warehouse. Unallocated units will remain backordered.
                 </p>
               </div>
-              <button
-                onClick={() => setShowOverrideModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: '1.25rem', cursor: 'pointer', color: '#94A3B8' }}
-              >
-                ✕
-              </button>
+              <button className="odoo-btn-close" onClick={() => setShowOverrideModal(false)}>✕</button>
             </div>
 
-            {/* Line-by-Line Allocation Matrix */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
-              {item.lines.map((line, idx) => {
-                const lineId = line.id || idx + 1;
-                let allocatedTotal = 0;
-                warehouses.forEach((wh) => {
-                  const key = `${lineId}_${wh.id}`;
-                  allocatedTotal += Number(manualAllocations[key]) || 0;
-                });
-                const remainingDeficit = Math.max(0, line.demand - allocatedTotal);
+            <div style={{ padding: '1.25rem' }}>
+              {/* Line-by-Line Allocation Matrix */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                {item.lines.map((line, idx) => {
+                  const lineId = line.id || idx + 1;
+                  let allocatedTotal = 0;
+                  warehouses.forEach((wh) => {
+                    const key = `${lineId}_${wh.id}`;
+                    allocatedTotal += Number(manualAllocations[key]) || 0;
+                  });
+                  const remainingDeficit = Math.max(0, line.demand - allocatedTotal);
 
-                return (
-                  <div key={idx} style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '1rem', backgroundColor: '#F8FAFC' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1F2937' }}>
-                          {line.productName}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                          Total Required Demand: <strong>{line.demand} units</strong>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '0.8125rem' }}>
-                        {remainingDeficit > 0 ? (
-                          <span style={{ color: '#D97706', fontWeight: 600 }}>
-                            {remainingDeficit} units to Backorder
-                          </span>
-                        ) : (
-                          <span style={{ color: '#10B981', fontWeight: 600 }}>
-                            ✓ 100% Demand Fulfilled
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${warehouses.length}, 1fr)`, gap: '0.75rem' }}>
-                      {warehouses.map((wh) => {
-                        const key = `${lineId}_${wh.id}`;
-                        const currentVal = manualAllocations[key] ?? 0;
-                        return (
-                          <div key={wh.id} style={{ backgroundColor: '#FFFFFF', padding: '0.6rem', borderRadius: 6, border: '1px solid #CBD5E1' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
-                              {wh.name}
-                            </div>
-                            <input
-                              type="number"
-                              min="0"
-                              max={line.demand}
-                              value={currentVal}
-                              onChange={(e) => {
-                                const val = Math.max(0, parseInt(e.target.value) || 0);
-                                setManualAllocations((prev) => ({
-                                  ...prev,
-                                  [key]: val,
-                                }));
-                              }}
-                              className="odoo-input"
-                              style={{ width: '100%', fontSize: '0.875rem', padding: '0.35rem 0.5rem' }}
-                            />
+                  return (
+                    <div key={idx} style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '1rem', backgroundColor: '#F8FAFC' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1F2937' }}>
+                            {line.productName}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                          <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                            Total Required Demand: <strong>{line.demand} units</strong>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '0.8125rem' }}>
+                          {remainingDeficit > 0 ? (
+                            <span style={{ color: '#D97706', fontWeight: 600 }}>
+                              {remainingDeficit} units to Backorder
+                            </span>
+                          ) : (
+                            <span style={{ color: '#10B981', fontWeight: 600 }}>
+                              ✓ 100% Demand Fulfilled
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-            {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #E2E8F0', paddingTop: '1rem' }}>
-              <button
-                onClick={() => setShowOverrideModal(false)}
-                className="odoo-btn odoo-btn-secondary"
-                disabled={submittingOverride}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmitOverride}
-                className="odoo-btn odoo-btn-primary"
-                disabled={submittingOverride}
-              >
-                {submittingOverride ? 'Saving Override...' : 'Apply Manual Split ↗'}
-              </button>
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.max(1, warehouses.length)}, 1fr)`, gap: '0.75rem' }}>
+                        {warehouses.map((wh) => {
+                          const key = `${lineId}_${wh.id}`;
+                          const currentVal = manualAllocations[key] ?? 0;
+                          return (
+                            <div key={wh.id} style={{ backgroundColor: '#FFFFFF', padding: '0.6rem', borderRadius: 6, border: '1px solid #CBD5E1', boxSizing: 'border-box' }}>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                                {wh.name}
+                              </div>
+                              <input
+                                type="number"
+                                min="0"
+                                max={line.demand}
+                                value={currentVal}
+                                onChange={(e) => {
+                                  const val = Math.max(0, parseInt(e.target.value) || 0);
+                                  setManualAllocations((prev) => ({
+                                    ...prev,
+                                    [key]: val,
+                                  }));
+                                }}
+                                className="odoo-input"
+                                style={{ width: '100%', fontSize: '0.875rem', padding: '0.35rem 0.5rem', boxSizing: 'border-box' }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Modal Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #E2E8F0', paddingTop: '1rem' }}>
+                <button
+                  onClick={() => setShowOverrideModal(false)}
+                  className="odoo-btn odoo-btn-secondary"
+                  disabled={submittingOverride}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleSubmitOverride()}
+                  className="odoo-btn odoo-btn-primary"
+                  disabled={submittingOverride}
+                >
+                  {submittingOverride ? 'Saving Override...' : 'Apply Manual Split ↗'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -472,3 +472,95 @@ export async function markInvoicePaid(id: number) {
 
   return getInvoiceById(updated.id);
 }
+
+export async function createCreditNote(input: {
+  invoice_id?: number;
+  customer_id?: number;
+  quote_id?: number;
+  amount: number;
+  reason: string;
+  notes?: string;
+}) {
+  let customerId = input.customer_id;
+  let quoteId = input.quote_id;
+
+  if (input.invoice_id) {
+    const [inv] = await db.select().from(invoices).where(eq(invoices.id, input.invoice_id)).limit(1);
+    if (inv) {
+      customerId = customerId || inv.customerId;
+      quoteId = quoteId || inv.quoteId;
+    }
+  }
+
+  if (!customerId) {
+    // default to first customer if available
+    const [firstCust] = await db.select().from(customers).limit(1);
+    customerId = firstCust?.id || 1;
+  }
+  if (!quoteId) {
+    const [firstQuote] = await db.select().from(quotes).limit(1);
+    quoteId = firstQuote?.id || 1;
+  }
+
+  const invoiceNumber = await generateInvoiceNumber();
+  const amountStr = Number(input.amount).toFixed(2);
+
+  const [creditNote] = await db
+    .insert(invoices)
+    .values({
+      invoiceNumber: `CN-${invoiceNumber}`,
+      quoteId,
+      customerId,
+      type: "credit_note",
+      subtotal: amountStr,
+      tax: "0.00",
+      total: amountStr,
+      status: "paid",
+      paidAt: new Date(),
+    })
+    .returning();
+
+  return {
+    credit_note: creditNote,
+    message: `Credit note ${creditNote.invoiceNumber} for ₹${Number(input.amount).toLocaleString("en-IN")} successfully issued. Reason: ${input.reason}`,
+  };
+}
+
+export async function createInvoice(input: {
+  customer_id: number;
+  quote_id?: number;
+  subtotal: number;
+  tax?: number;
+  total?: number;
+  type?: string;
+  due_date?: Date;
+}) {
+  const invoiceNumber = await generateInvoiceNumber();
+  const subtotalStr = Number(input.subtotal).toFixed(2);
+  const taxStr = Number(input.tax || 0).toFixed(2);
+  const totalStr = Number(input.total || input.subtotal + (input.tax || 0)).toFixed(2);
+
+  let quoteId = input.quote_id;
+  if (!quoteId) {
+    const [q] = await db.select().from(quotes).where(eq(quotes.customerId, input.customer_id)).limit(1);
+    quoteId = q?.id || 1;
+  }
+
+  const [inv] = await db
+    .insert(invoices)
+    .values({
+      invoiceNumber,
+      quoteId,
+      customerId: input.customer_id,
+      type: input.type || "one_time",
+      subtotal: subtotalStr,
+      tax: taxStr,
+      total: totalStr,
+      status: "sent",
+      dueDate: input.due_date || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    })
+    .returning();
+
+  return getInvoiceById(inv.id);
+}
+

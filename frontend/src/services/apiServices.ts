@@ -270,7 +270,17 @@ export const billingApi = {
     const res = await api.post(`/billing/invoices/${invoiceId}/pay`);
     return res.data;
   },
+  createInvoice: async (data: { customer_id: number; quote_id?: number; subtotal: number; tax?: number; total?: number; type?: string; due_date?: string }) => {
+    const res = await api.post('/billing/invoices', data);
+    return res.data;
+  },
+  issueCreditNote: async (data: { invoice_id?: number | string; customer_id?: number; quote_id?: number; amount: number; reason: string; notes?: string }) => {
+    const url = data.invoice_id ? `/billing/invoices/${data.invoice_id}/credit-note` : '/billing/credit-notes';
+    const res = await api.post(url, data);
+    return res.data;
+  },
 };
+
 
 // 9. Customer Portal API (Public Magic Link)
 export const portalApi = {

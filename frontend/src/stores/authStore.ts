@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-export type UserRole = 'USER' | 'MANAGER' | 'ADMIN' | 'customer' | 'rep';
+export type UserRole = 'USER' | 'MANAGER' | 'ADMIN' | 'customer' | 'rep' | 'finance' | 'operations' | 'finance_operations' | 'Finance & Operations' | 'Finance' | 'Operations';
 export type UserStatus = 'ACTIVE' | 'BANNED';
 
 export interface AuthUser {
