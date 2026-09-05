@@ -1,0 +1,13 @@
+{
+  "name": "database-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "db:studio": "npm --prefix db run db:studio",
+    "db:generate": "npm --prefix db run db:generate",
+    "db:migrate": "npm --prefix db run db:migrate",
+    "db:push": "npm --prefix db run db:push",
+    "dev": "npm --prefix db run dev",
+    "start": "npm --prefix db run start"
+  }
+}
