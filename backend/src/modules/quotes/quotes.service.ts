@@ -208,6 +208,7 @@ export function computeBlendedRisk(
 
 export async function listQuotes(query: {
   status?: string;
+  search?: string;
   customer_id?: number;
   rep_id?: number;
   page?: number;
@@ -219,8 +220,21 @@ export async function listQuotes(query: {
 
   const conditions = [];
   if (query.status) conditions.push(eq(quotes.status, query.status));
+  if (query.status) {
+    if (query.status.includes(",")) {
+      const statuses = query.status.split(",").map((s) => s.trim()).filter(Boolean);
+      conditions.push(inArray(quotes.status, statuses));
+    } else {
+      conditions.push(eq(quotes.status, query.status));
+    }
+  }
   if (query.customer_id) conditions.push(eq(quotes.customerId, query.customer_id));
   if (query.rep_id) conditions.push(eq(quotes.repId, query.rep_id));
+  if (query.search) {
+    conditions.push(
+      sql`(${quotes.quoteNumber} ILIKE ${`%${query.search}%`} OR ${customers.name} ILIKE ${`%${query.search}%`})`
+    );
+  }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

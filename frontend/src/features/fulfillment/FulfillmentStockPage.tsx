@@ -54,8 +54,15 @@ export default function FulfillmentStockPage() {
     try {
       setValidating(true);
       await fulfillmentApi.acceptSplit(id);
+      const res = await fulfillmentApi.acceptSplit(id);
+      const invNum = res?.data?.invoice_number || res?.invoice_number;
       setPickingStage(4);
       toast.success('Picking confirmed & stock dispatch updated to Shipped / Done!');
+      toast.success(
+        invNum
+          ? `Picking confirmed & dispatched! Invoice ${invNum} generated.`
+          : 'Picking confirmed & stock dispatch updated to Shipped / Done!'
+      );
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err.message || 'Validation failed');
     } finally {

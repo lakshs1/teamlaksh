@@ -409,6 +409,10 @@ export default function CreateQuotationPage() {
       if (err?.response?.data?.message) {
         toast.error(`Backend notice: ${err.response.data.message}`, { duration: 5000 });
       }
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to create quotation';
+      toast.error(`Backend notice: ${errMsg}`, { duration: 5000 });
+      setIsSubmittingLoading(false);
+      return;
     } finally {
       setIsSubmittingLoading(false);
     }

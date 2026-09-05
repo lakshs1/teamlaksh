@@ -39,6 +39,8 @@ export const updateQuoteSchema = z
 export const quoteQuerySchema = z
   .object({
     status: z.enum(QUOTE_STATUSES).optional(),
+    status: z.string().optional(),
+    search: z.string().optional(),
     customer_id: z.coerce.number().int().positive().optional(),
     rep_id: z.coerce.number().int().positive().optional(),
     page: z.coerce.number().int().positive().default(1),

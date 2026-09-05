@@ -20,6 +20,10 @@ export default function FulfillmentListPage() {
         const res = await quoteApi.getQuotes({ status: 'fulfillment' });
         const data = res.data?.quotes ?? res.data ?? [];
         setFulfillments(data.map(mapFulfillment));
+        // Fetch quotes ready for or in fulfillment (PRD B6: approved quotes automatically move to fulfillment split)
+        const res = await quoteApi.getQuotes({ status: 'approved,fulfillment,confirmed' });
+        const items = res.data?.items ?? res.data?.quotes ?? (Array.isArray(res.data) ? res.data : []);
+        setFulfillments(items.map(mapFulfillment));
       } catch (err: any) {
         setError(err.message || 'Failed to load fulfillments');
         toast.error('Failed to load fulfillments');
@@ -84,6 +88,19 @@ export default function FulfillmentListPage() {
                   <td>{f.responsible}</td>
                   <td>
                     <span className="odoo-badge">{f.status}</span>
+                    <span
+                      className="odoo-badge"
+                      style={{
+                        backgroundColor:
+                          f.status === 'confirmed' || f.status === 'Done' ? '#DCFCE7' :
+                          f.status === 'approved' ? '#FEF3C7' : '#F1F5F9',
+                        color:
+                          f.status === 'confirmed' || f.status === 'Done' ? '#15803D' :
+                          f.status === 'approved' ? '#B45309' : '#475569',
+                      }}
+                    >
+                      {f.status === 'approved' ? 'Ready for Split' : f.status === 'confirmed' ? 'Dispatched' : f.status}
+                    </span>
                   </td>
                   <td>
                     <button

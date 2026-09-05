@@ -1,3 +1,4 @@
+
 import { eq, and, inArray, sql, desc, asc } from "drizzle-orm";
 import {
   db,
@@ -10,6 +11,9 @@ import {
   backorders,
   stockMovements,
   approvalLogs,
+  invoices,
+  subscriptions,
+  billingSchedules,
 } from "@db";
 import { ApiError } from "../../lib/api-error.js";
 
@@ -326,10 +330,110 @@ export async function acceptWarehouseSplit(quoteId: number, userId: number) {
     reason: `Fulfillment split accepted: ${recommendation.splits.length} allocations, ${recommendation.backordered.length} backordered lines`,
   });
 
+  // 4. Update quote status to confirmed & ready for billing
+  await db
+    .update(quotes)
+    .set({ status: "confirmed", updatedAt: new Date() })
+    .where(eq(quotes.id, quoteId));
+
+  // 5. Ensure invoice and subscriptions are generated
+  const inv = await ensureOrderInvoicedAndSubscribed(quoteId);
+
   return {
     ...recommendation,
-    message: `Fulfillment accepted with ${recommendation.splits.length} allocations across ${recommendation.total_shipments} warehouse(s).`,
+    invoice_number: inv?.invoiceNumber,
+    message: `Fulfillment accepted & dispatched. Invoice ${inv?.invoiceNumber || ''} generated successfully!`,
   };
+}
+
+async function ensureOrderInvoicedAndSubscribed(quoteId: number) {
+  const [quote] = await db.select().from(quotes).where(eq(quotes.id, quoteId)).limit(1);
+  if (!quote) return null;
+
+  const lines = await db.select().from(quoteLines).where(eq(quoteLines.quoteId, quoteId));
+  const hasRecurring = lines.some((l) => l.isRecurring);
+
+  let generatedInvoice: any = null;
+  const existingInvoices = await db.select().from(invoices).where(eq(invoices.quoteId, quoteId)).limit(1);
+  if (existingInvoices.length === 0) {
+    const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(invoices);
+    const count = Number(countResult?.count || 0);
+    const year = new Date().getFullYear();
+    const seq = String(count + 1).padStart(4, "0");
+    const invoiceNumber = `INV-${year}-${seq}`;
+
+    const [inv] = await db
+      .insert(invoices)
+      .values({
+        invoiceNumber,
+        quoteId,
+        customerId: quote.customerId,
+        type: hasRecurring ? "recurring" : "one_time",
+        subtotal: quote.subtotal,
+        tax: quote.totalTax,
+        total: quote.grandTotal,
+        status: "sent",
+        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      })
+      .returning();
+    generatedInvoice = inv;
+  } else {
+    generatedInvoice = existingInvoices[0];
+  }
+
+  // Generate subscriptions for recurring lines
+  for (const line of lines) {
+    if (line.isRecurring) {
+      const existingSub = await db
+        .select()
+        .from(subscriptions)
+        .where(and(eq(subscriptions.quoteId, quoteId), eq(subscriptions.quoteLineId, line.id)))
+        .limit(1);
+
+      if (!existingSub || existingSub.length === 0) {
+        const now = new Date();
+        const nextMonth = new Date(now.getTime());
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+        const [sub] = await db
+          .insert(subscriptions)
+          .values({
+            quoteId,
+            quoteLineId: line.id,
+            customerId: quote.customerId,
+            productId: line.productId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            interval: "monthly",
+            status: "active",
+            startsAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: nextMonth,
+          })
+          .returning();
+
+        const perPeriodAmount = (line.quantity * Number(line.unitPrice)).toFixed(2);
+        const scheduleRows = [];
+        for (let i = 0; i < 12; i++) {
+          const pStart = new Date(now.getTime());
+          pStart.setMonth(pStart.getMonth() + i);
+          const pEnd = new Date(now.getTime());
+          pEnd.setMonth(pEnd.getMonth() + i + 1);
+
+          scheduleRows.push({
+            subscriptionId: sub.id,
+            periodStart: pStart,
+            periodEnd: pEnd,
+            amount: perPeriodAmount,
+            status: "upcoming",
+          });
+        }
+        await db.insert(billingSchedules).values(scheduleRows);
+      }
+    }
+  }
+
+  return generatedInvoice;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -448,11 +552,21 @@ export async function overrideWarehouseSplit(
     reason: `Manual fulfillment override with ${committedSplits.length} allocations and ${committedBackorders.length} backorders`,
   });
 
+  // Update quote status to confirmed & ready for billing
+  await db
+    .update(quotes)
+    .set({ status: "confirmed", updatedAt: new Date() })
+    .where(eq(quotes.id, quoteId));
+
+  // Ensure invoice and subscriptions are generated
+  const inv = await ensureOrderInvoicedAndSubscribed(quoteId);
+
   return {
     quote_id: quoteId,
     splits: committedSplits,
     backordered: committedBackorders,
-    message: "Manual split override applied successfully",
+    invoice_number: inv?.invoiceNumber,
+    message: `Manual split override applied! Order confirmed and invoice ${inv?.invoiceNumber || ''} generated.`,
   };
 }
 

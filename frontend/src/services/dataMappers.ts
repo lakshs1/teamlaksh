@@ -227,9 +227,12 @@ export function mapInvoice(inv: any): InvoiceItem {
   return {
     id: str(inv.id),
     reference: inv.invoiceNumber || `INV/${str(inv.id).padStart(5, '0')}`,
+    reference: inv.invoiceNumber || inv.invoice_number || `INV/${str(inv.id).padStart(5, '0')}`,
     customerName: inv.customer?.name || inv.customerName || 'Unknown',
     invoiceDate: dateStr(inv.createdAt),
     dueDate: dateStr(inv.dueDate),
+    invoiceDate: dateStr(inv.createdAt || inv.created_at),
+    dueDate: dateStr(inv.dueDate || inv.due_date),
     amount: num(inv.total),
     status,
     paymentTerms: inv.paymentTerms || 'Net 30',

@@ -111,6 +111,14 @@ export default function FulfillmentDetailPage() {
       await fulfillmentApi.acceptSplit(id);
       toast.success('Warehouse split accepted & inventory allocated!');
       navigate('/fulfillment');
+      const res = await fulfillmentApi.acceptSplit(id);
+      const invNum = res?.data?.invoice_number || res?.invoice_number;
+      toast.success(
+        invNum
+          ? `Warehouse split validated! Invoice ${invNum} generated & ready for payment.`
+          : 'Warehouse split accepted, inventory allocated & invoice generated!'
+      );
+      navigate('/invoices');
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err.message || 'Validation failed');
     } finally {

@@ -68,6 +68,16 @@ export default function AuthPortalPage() {
           res = await authApi.demoLogin(backendRole);
         }
         if (res?.data?.accessToken && res?.data?.user) {
+          if (res.data.user.role !== backendRole) {
+            try {
+              const switchRes = await authApi.switchRole(backendRole);
+              if (switchRes?.data?.user && switchRes?.data?.accessToken) {
+                res = switchRes;
+              }
+            } catch (switchErr) {
+              console.warn('Auto-sync role switch notice:', switchErr);
+            }
+          }
           setAuth(res.data.user, res.data.accessToken);
         } else {
           setAuth({
