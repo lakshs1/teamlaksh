@@ -11,7 +11,7 @@ import {
 const router = Router();
 
 // ── Approval Queue ────────────────────────────────────────
-router.get("/pending", authenticate, authorize("manager", "finance", "admin"), getPendingApprovalsHandler);
+router.get("/pending", authenticate, authorize("manager", "finance", "admin", "rep"), getPendingApprovalsHandler);
 
 // ── Audit Trail ───────────────────────────────────────────
 router.get("/quotes/:quoteId/logs", authenticate, getApprovalLogsHandler);

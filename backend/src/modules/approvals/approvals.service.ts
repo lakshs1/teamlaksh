@@ -44,10 +44,15 @@ export async function getPendingApprovals(reviewer: { id: number; role: string }
     statusFilter = [PENDING_MANAGER_STATUS];
   } else if (reviewer.role === "finance") {
     statusFilter = [PENDING_FINANCE_STATUS];
-  } else if (reviewer.role === "admin") {
+  } else if (reviewer.role === "admin" || reviewer.role === "rep") {
     statusFilter = [PENDING_MANAGER_STATUS, PENDING_FINANCE_STATUS];
   } else {
-    throw ApiError.forbidden("Only manager, finance, or admin roles can access the approval queue");
+    throw ApiError.forbidden("Only manager, finance, admin, or rep roles can access the approval queue");
+  }
+
+  const conditions = [inArray(quotes.status, statusFilter)];
+  if (reviewer.role === "rep") {
+    conditions.push(eq(quotes.repId, reviewer.id));
   }
 
   const rows = await db
@@ -74,7 +79,7 @@ export async function getPendingApprovals(reviewer: { id: number; role: string }
     })
     .from(quotes)
     .leftJoin(customers, eq(quotes.customerId, customers.id))
-    .where(inArray(quotes.status, statusFilter))
+    .where(and(...conditions))
     .orderBy(desc(quotes.updatedAt));
 
   return rows;

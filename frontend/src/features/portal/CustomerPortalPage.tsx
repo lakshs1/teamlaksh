@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { useDealFlowStore } from '../../stores/dealflowStore';
+import { useDealFlowStore, type PortalChatMessage } from '../../stores/dealflowStore';
 import { useAuthStore } from '../../stores/authStore';
 import { portalApi } from '../../services/apiServices';
 import toast from 'react-hot-toast';
@@ -10,20 +10,40 @@ export default function CustomerPortalPage() {
   const activeToken = portalToken || id;
 
   const { user } = useAuthStore();
-  const { portalMessages, addPortalMessage } = useDealFlowStore();
+  const { portalMessages, setPortalMessages, addPortalMessage } = useDealFlowStore();
+
+  const [localMessages, setLocalMessages] = useState<PortalChatMessage[]>(() => {
+    try {
+      const cached = localStorage.getItem(`dealflow_portal_chat_${activeToken || 'active'}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return portalMessages;
+  });
 
   const [inputMsg, setInputMsg] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [showCounterModal, setShowCounterModal] = useState(false);
   const [counterDiscount, setCounterDiscount] = useState('10');
   const [liveQuote, setLiveQuote] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const customerName = user?.name || liveQuote?.customer_name || 'Customer Account';
   const customerEmail = user?.email || liveQuote?.customer_email || 'No registered email';
   const initial = customerName.charAt(0).toUpperCase();
 
   const quoteLines = liveQuote?.lines || liveQuote?.items || [];
+
+  const displayMessages = localMessages.length > 0 ? localMessages : portalMessages;
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [displayMessages]);
 
   const loadQuoteData = useCallback(async () => {
     setLoading(true);
@@ -67,14 +87,54 @@ export default function CustomerPortalPage() {
       });
     }
 
-    // 2. Fetch live data from backend if available
+    // 2. Fetch live data & persisted comments from backend
     try {
       const tokenToFetch = activeToken || 'active';
       const res = await portalApi.getPortalQuote(tokenToFetch);
-      if (res?.data) {
-        setLiveQuote(res.data);
-      } else if (res && (res as any).id) {
-        setLiveQuote(res);
+      const data = res?.data || res;
+      if (data) {
+        // Map backend quote status for display
+        const displayStatus =
+          data.status === 'pending_manager' || data.status === 'pending_finance'
+            ? 'Pending Approval'
+            : data.status === 'fulfillment'
+            ? 'Confirmed'
+            : data.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Sent';
+
+        setLiveQuote({
+          ...data,
+          status: displayStatus,
+        });
+
+        // Sync persisted comments from the database
+        if (data.comments && Array.isArray(data.comments)) {
+          const mappedMsgs: PortalChatMessage[] = data.comments.map((c: any) => {
+            const isCust = c.author_type === 'customer';
+            const timeStr = c.created_at
+              ? new Date(c.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'Just now';
+            return {
+              id: `pc-${c.id}`,
+              sender: isCust ? 'Customer' : 'Sales Rep',
+              senderName: c.author_name || (isCust ? 'Customer' : 'Sales Team'),
+              timestamp: timeStr,
+              text: c.message,
+            };
+          });
+
+          setLocalMessages(mappedMsgs);
+          setPortalMessages(mappedMsgs);
+
+          try {
+            localStorage.setItem(`dealflow_portal_chat_${tokenToFetch}`, JSON.stringify(mappedMsgs));
+            if (data.portal_token) {
+              localStorage.setItem(`dealflow_portal_chat_${data.portal_token}`, JSON.stringify(mappedMsgs));
+            }
+            if (data.id) {
+              localStorage.setItem(`dealflow_portal_chat_${data.id}`, JSON.stringify(mappedMsgs));
+            }
+          } catch {}
+        }
       }
     } catch (err: any) {
       console.warn("Portal quote fetch failed:", err?.message);
@@ -82,7 +142,7 @@ export default function CustomerPortalPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeToken, user]);
+  }, [activeToken, user, setPortalMessages]);
 
   useEffect(() => {
     loadQuoteData();
@@ -90,19 +150,38 @@ export default function CustomerPortalPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMsg.trim()) return;
-    const msgToSend = inputMsg;
+    if (!inputMsg.trim() || isSending) return;
+    const msgToSend = inputMsg.trim();
     setInputMsg('');
-    addPortalMessage(msgToSend, 'Customer');
+    setIsSending(true);
 
     const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
+
+    // Optimistic message update
+    const optimisticMsg: PortalChatMessage = {
+      id: `opt-${Date.now()}`,
+      sender: 'Customer',
+      senderName: customerName || 'Customer',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      text: msgToSend,
+    };
+    setLocalMessages((prev) => [...prev, optimisticMsg]);
+    addPortalMessage(msgToSend, 'Customer');
+
     try {
-      await portalApi.postComment(tokenToUse, { message: msgToSend });
-      // Re-fetch to get updated comments/state
+      await portalApi.postComment(tokenToUse, {
+        message: msgToSend,
+        author_name: customerName,
+        author_type: 'customer',
+      });
+      // Re-fetch to get the official database-persisted record
       await loadQuoteData();
+      toast.success('Message sent to sales team');
     } catch (err: any) {
       console.error("Failed to post comment", err);
       toast.error(err?.response?.data?.message || 'Failed to post comment');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -115,6 +194,7 @@ export default function CustomerPortalPage() {
       if (liveQuote) {
         setLiveQuote({ ...liveQuote, status: 'Confirmed' });
       }
+      await loadQuoteData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to confirm quotation');
     }
@@ -124,36 +204,44 @@ export default function CustomerPortalPage() {
     setShowCounterModal(false);
     const counterPct = Number(counterDiscount);
     const msg = `Counter-proposal submitted: Requesting ${counterPct}% discount on order lines.`;
-    addPortalMessage(msg, 'Customer');
 
     const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
+
+    // Optimistic message update
+    const optimisticMsg: PortalChatMessage = {
+      id: `opt-${Date.now()}`,
+      sender: 'Customer',
+      senderName: customerName || 'Customer',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      text: msg,
+    };
+    setLocalMessages((prev) => [...prev, optimisticMsg]);
+    addPortalMessage(msg, 'Customer');
+
     try {
-      // 1. Post Customer Counter-Discount Comment (POST /api/v1/portal/quotes/:token/comments)
+      // 1. Post Customer Counter-Discount Comment to database
       await portalApi.postComment(tokenToUse, {
         message: msg,
         counter_discount_pct: counterPct,
+        author_name: customerName,
+        author_type: 'customer',
       });
 
-      // 2. Submit & Confirm Quote with Counter-Offer to re-enter approval flow (POST /api/v1/portal/quotes/:token/confirm)
+      // 2. Submit & Confirm Quote with Counter-Offer to re-enter approval flow
       const confirmRes = await portalApi.confirmPortalQuote(tokenToUse);
-
-      const statusMsg = confirmRes?.data?.message || 'Counter proposal submitted! Quotation automatically re-entered approval flow for review.';
+      const statusMsg = confirmRes?.data?.message || confirmRes?.message || 'Counter proposal submitted! Quotation automatically re-entered approval flow for review.';
       toast.success(statusMsg);
 
       if (liveQuote) {
         setLiveQuote({
           ...liveQuote,
-          status: confirmRes?.data?.status === 'pending_manager' ? 'Pending Approval' : (confirmRes?.data?.status || 'Pending Approval'),
+          status: 'Pending Approval',
           discount_pct: counterPct,
         });
       }
 
-      setTimeout(() => {
-        addPortalMessage(
-          `Counter-offer of ${counterPct}% discount is currently under review by the Sales Manager.`,
-          'Sales Rep'
-        );
-      }, 1000);
+      // Re-fetch to get updated comments & status from backend database
+      await loadQuoteData();
     } catch (err: any) {
       console.error("Failed to submit counter proposal:", err);
       toast.error(err?.response?.data?.message || 'Failed to submit counter proposal');
@@ -274,56 +362,98 @@ export default function CustomerPortalPage() {
           </div>
 
           {/* Live Negotiation Chat */}
-          <div className="odoo-card" style={{ display: 'flex', flexDirection: 'column', height: 420 }}>
-            <div style={{ paddingBottom: '0.75rem', borderBottom: '1px solid #E2E8F0', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937' }}>Live Line-Item Negotiation</h3>
-              <span style={{ fontSize: '0.75rem', color: '#64748B' }}>Ask line level questions or request counter discounts directly with your sales manager</span>
+          <div className="odoo-card" style={{ display: 'flex', flexDirection: 'column', height: 440 }}>
+            <div style={{ paddingBottom: '0.75rem', borderBottom: '1px solid #E2E8F0', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  Live Line-Item Negotiation
+                  {displayMessages.length > 0 && (
+                    <span
+                      style={{
+                        backgroundColor: '#EDE9FE',
+                        color: '#6D28D9',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: 12,
+                      }}
+                    >
+                      {displayMessages.length} message{displayMessages.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </h3>
+                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                  Ask line level questions or request counter discounts directly with your sales manager
+                </span>
+              </div>
             </div>
 
             {/* Messages list */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.85rem', paddingRight: '0.5rem' }}>
-              {portalMessages.length === 0 ? (
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '0.5rem' }}>
+              {displayMessages.length === 0 ? (
                 <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: '0.8125rem', margin: 'auto' }}>
                   No messages yet. Type below to start live negotiation.
                 </div>
               ) : (
-                portalMessages.map((msg) => {
+                displayMessages.map((msg) => {
                   const isCustomer = msg.sender === 'Customer';
+                  const isSystemOrCounter = msg.text.toLowerCase().includes('counter') || msg.text.toLowerCase().includes('status');
                   return (
                     <div
                       key={msg.id}
                       style={{
                         alignSelf: isCustomer ? 'flex-end' : 'flex-start',
-                        maxWidth: '75%',
-                        backgroundColor: isCustomer ? '#714B67' : '#F1F5F9',
+                        maxWidth: '82%',
+                        backgroundColor: isCustomer ? '#714B67' : isSystemOrCounter ? '#F5F3FF' : '#F1F5F9',
                         color: isCustomer ? '#FFFFFF' : '#1F2937',
+                        border: isCustomer ? 'none' : isSystemOrCounter ? '1px solid #DDD6FE' : '1px solid #E2E8F0',
                         padding: '0.75rem 1rem',
                         borderRadius: 12,
                         fontSize: '0.8125rem',
                         lineHeight: 1.5,
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                       }}
                     >
-                      <div style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '0.2rem', fontWeight: 600 }}>
-                        {msg.senderName} • {msg.timestamp}
+                      <div
+                        style={{
+                          fontSize: '0.7rem',
+                          opacity: isCustomer ? 0.85 : 0.75,
+                          marginBottom: '0.25rem',
+                          fontWeight: 600,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                        }}
+                      >
+                        <span>{msg.senderName}</span>
+                        <span>•</span>
+                        <span>{msg.timestamp}</span>
                       </div>
-                      <div>{msg.text}</div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
                     </div>
                   );
                 })
               )}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSendMessage} style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+            <form onSubmit={handleSendMessage} style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem' }}>
               <input
                 type="text"
                 className="odoo-input"
                 placeholder="Type a message or negotiation note..."
                 value={inputMsg}
+                disabled={isSending}
                 onChange={(e) => setInputMsg(e.target.value)}
               />
-              <button type="submit" className="odoo-btn odoo-btn-primary">
-                Send
+              <button
+                type="submit"
+                className="odoo-btn odoo-btn-primary"
+                disabled={isSending || !inputMsg.trim()}
+                style={{ minWidth: 80 }}
+              >
+                {isSending ? 'Sending...' : 'Send'}
               </button>
             </form>
           </div>

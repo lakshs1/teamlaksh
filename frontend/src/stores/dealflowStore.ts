@@ -183,7 +183,8 @@ export interface DealFlowState {
   rejectRequest: (approvalId: string, note?: string) => void;
   validateFulfillment: (fulfillmentId: string) => void;
   registerInvoicePayment: (invoiceId: string) => void;
-  addPortalMessage: (text: string, sender: 'Customer' | 'Sales Rep') => void;
+  setPortalMessages: (messages: PortalChatMessage[]) => void;
+  addPortalMessage: (text: string, sender?: 'Customer' | 'Sales Rep') => void;
   updateDiscountRules: (newRules: DiscountRule) => void;
   triggerDealNudge: (alertId: string) => void;
   addProduct: (prod: ProductItem) => void;
@@ -334,13 +335,15 @@ export const useDealFlowStore = create<DealFlowState>((set) => ({
     ),
   })),
 
-  addPortalMessage: (text, sender) => set((state) => ({
+  setPortalMessages: (messages) => set({ portalMessages: messages }),
+
+  addPortalMessage: (text, sender = 'Customer') => set((state) => ({
     portalMessages: [
       ...state.portalMessages,
       {
         id: `pm-${Date.now()}`,
-        sender,
-        senderName: sender === 'Customer' ? 'Customer' : 'Sales Rep',
+        sender: sender ?? 'Customer',
+        senderName: (sender ?? 'Customer') === 'Customer' ? 'Customer' : 'Sales Rep',
         timestamp: 'Just now',
         text,
       },

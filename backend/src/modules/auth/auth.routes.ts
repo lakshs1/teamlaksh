@@ -15,6 +15,7 @@ router.post("/demo-login", validate({ body: roleSelectSchema }), authController.
 // ── Protected routes ───────────────────────────────────────
 router.post("/logout", authenticate, authController.logout);
 router.get("/me", authenticate, authController.getMe);
+router.get("/users", authenticate, authController.getUsers);
 router.post("/switch-role", authenticate, validate({ body: roleSelectSchema }), authController.switchRole);
 
 export default router;

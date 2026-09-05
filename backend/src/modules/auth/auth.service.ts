@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { db, users, USER_ROLES, type SafeUser } from "@db";
 import { hashPassword, comparePassword } from "../../lib/password.js";
 import { generateTokenPair, verifyRefreshToken } from "../../lib/jwt.js";
@@ -254,4 +254,9 @@ export async function demoLogin(role: string) {
     user: toSafeUser(user),
     ...tokens,
   };
+}
+
+export async function getAllUsers() {
+  const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+  return allUsers.map(toSafeUser);
 }

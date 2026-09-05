@@ -8,7 +8,7 @@ export default function AuthLayout() {
       <div className={styles.brand}>
         <div className={styles.logo}>
           <div className={styles.logoMark}>H</div>
-          <span className={styles.logoText}>AppName</span>
+          <span className={styles.logoText}>DealFlow360</span>
         </div>
         <h1 className={styles.tagline}>Build. Ship.<br />Win.</h1>
         <p className={styles.sub}>Your hackathon-ready frontend template</p>

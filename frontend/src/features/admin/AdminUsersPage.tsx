@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable, type Column } from '../../components/ui/DataTable';
+import { authApi } from '../../services/apiServices';
+import toast from 'react-hot-toast';
 import styles from './AdminUsersPage.module.css';
 
-interface MockUser {
+interface UserData {
   id: string;
   name: string;
   email: string;
@@ -13,35 +15,63 @@ interface MockUser {
   createdAt: string;
 }
 
-const USERS: MockUser[] = [
-  { id: '1', name: 'Jane Cooper', email: 'jane@example.com', role: 'USER', status: 'ACTIVE', createdAt: '2026-08-15' },
-  { id: '2', name: 'Bob Smith', email: 'bob@example.com', role: 'MANAGER', status: 'ACTIVE', createdAt: '2026-08-12' },
-  { id: '3', name: 'Alice Johnson', email: 'alice@example.com', role: 'USER', status: 'ACTIVE', createdAt: '2026-08-10' },
-  { id: '4', name: 'Carlos Ruiz', email: 'carlos@example.com', role: 'USER', status: 'BANNED', createdAt: '2026-07-28' },
-  { id: '5', name: 'Diana Kim', email: 'diana@example.com', role: 'ADMIN', status: 'ACTIVE', createdAt: '2026-07-20' },
-  { id: '6', name: 'Edward Lee', email: 'edward@example.com', role: 'USER', status: 'ACTIVE', createdAt: '2026-07-15' },
-];
-
-const columns: Column<MockUser>[] = [
+const columns: Column<UserData>[] = [
   { key: 'name', header: 'Name' },
   { key: 'email', header: 'Email' },
   {
     key: 'role',
     header: 'Role',
-    render: (u) => <Badge variant={u.role === 'ADMIN' ? 'primary' : u.role === 'MANAGER' ? 'info' : 'neutral'} size="sm">{u.role}</Badge>,
+    render: (u) => (
+      <Badge
+        variant={u.role === 'admin' ? 'primary' : u.role === 'manager' || u.role === 'finance' ? 'info' : 'neutral'}
+        size="sm"
+      >
+        {u.role.toUpperCase()}
+      </Badge>
+    ),
   },
   {
     key: 'status',
     header: 'Status',
-    render: (u) => <Badge variant={u.status === 'ACTIVE' ? 'success' : 'error'} size="sm">{u.status}</Badge>,
+    render: (u) => (
+      <Badge variant={u.status === 'ACTIVE' ? 'success' : 'error'} size="sm">
+        {u.status}
+      </Badge>
+    ),
   },
   { key: 'createdAt', header: 'Joined' },
 ];
 
 export default function AdminUsersPage() {
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const filtered = USERS.filter(
+  useEffect(() => {
+    async function loadUsers() {
+      try {
+        setLoading(true);
+        const res = await authApi.getUsers();
+        const rawUsers = Array.isArray(res.data) ? res.data : [];
+        const mapped: UserData[] = rawUsers.map((u: any) => ({
+          id: String(u.id),
+          name: u.name || 'Unknown',
+          email: u.email || '',
+          role: u.role || 'rep',
+          status: u.isActive === false ? 'BANNED' : 'ACTIVE',
+          createdAt: u.createdAt ? new Date(u.createdAt).toISOString().split('T')[0] : 'N/A',
+        }));
+        setUsers(mapped);
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || err.message || 'Failed to load users');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadUsers();
+  }, []);
+
+  const filtered = users.filter(
     (u) =>
       u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase())
@@ -64,12 +94,16 @@ export default function AdminUsersPage() {
         />
       </div>
 
-      <DataTable
-        columns={columns}
-        data={filtered}
-        emptyMessage="No users found"
-        emptyIcon="👥"
-      />
+      {loading ? (
+        <div style={{ padding: '2rem', textAlign: 'center', color: '#64748B' }}>Loading platform users...</div>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={filtered}
+          emptyMessage="No users found"
+          emptyIcon="👥"
+        />
+      )}
     </div>
   );
 }

@@ -30,6 +30,10 @@ export const authApi = {
     const res = await api.post('/auth/switch-role', { role });
     return res.data;
   },
+  getUsers: async () => {
+    const res = await api.get('/auth/users');
+    return res.data;
+  },
 };
 
 // 2. Customer & Tier API
@@ -262,7 +266,7 @@ export const portalApi = {
     const res = await api.get(`/portal/quotes/${token}`);
     return res.data;
   },
-  postComment: async (token: string, data: { quote_line_id?: number; message: string; counter_discount_pct?: number }) => {
+  postComment: async (token: string, data: { quote_line_id?: number; message: string; counter_discount_pct?: number; author_name?: string; author_type?: string }) => {
     const res = await api.post(`/portal/quotes/${token}/comments`, data);
     return res.data;
   },

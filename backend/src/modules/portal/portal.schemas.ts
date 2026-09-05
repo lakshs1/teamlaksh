@@ -18,6 +18,8 @@ export const portalCommentInputSchema = z
       .max(100, "Discount cannot exceed 100%")
       .optional()
       .openapi({ example: 15.0, description: "Customer proposed counter discount" }),
+    author_type: z.string().optional().openapi({ example: "customer" }),
+    author_name: z.string().optional().openapi({ example: "Odoo Evaluators Inc" }),
   })
   .openapi("PortalCommentRequest");
 

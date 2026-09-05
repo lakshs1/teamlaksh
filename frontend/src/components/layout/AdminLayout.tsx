@@ -23,7 +23,7 @@ export default function AdminLayout() {
       <div className={styles.mobileHeader}>
         <div className={styles.logoRow}>
           <div className={styles.logoMark}>H</div>
-          <span className={styles.logoText}>AppName</span>
+          <span className={styles.logoText}>DealFlow360</span>
         </div>
         <button
           className={styles.menuToggle}
@@ -41,7 +41,7 @@ export default function AdminLayout() {
       <aside className={`${styles.sidebar} ${mobileOpen ? styles.sidebarOpen : ''}`}>
         <div className={styles.logoRow}>
           <div className={styles.logoMark}>H</div>
-          <span className={styles.logoText}>AppName</span>
+          <span className={styles.logoText}>DealFlow360</span>
           <span className={styles.adminBadge}>Admin</span>
         </div>
         <nav className={styles.nav}>

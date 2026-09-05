@@ -1,4 +1,4 @@
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -11,6 +11,7 @@ import {
   productVariants,
   discountRules,
   approvalLogs,
+  portalComments,
   users,
   QUOTE_STATUS,
 } from "@db";
@@ -330,10 +331,14 @@ export async function getQuoteById(id: number) {
     })
     .from(quoteLines)
     .leftJoin(products, eq(quoteLines.productId, products.id))
-    .where(eq(quoteLines.quoteId, id))
-    .orderBy(quoteLines.id);
+  // Fetch negotiation comments / counter-offers
+  const comments = await db
+    .select()
+    .from(portalComments)
+    .where(eq(portalComments.quoteId, id))
+    .orderBy(asc(portalComments.createdAt));
 
-  return { ...row, lines };
+  return { ...row, lines, comments };
 }
 
 export async function createQuote(

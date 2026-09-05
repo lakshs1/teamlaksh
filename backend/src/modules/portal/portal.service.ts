@@ -27,6 +27,22 @@ async function getQuoteByTokenOrThrow(token: string) {
     .where(eq(quotes.portalToken, token))
     .limit(1);
 
+  if (!quote && !isNaN(Number(token))) {
+    [quote] = await db
+      .select()
+      .from(quotes)
+      .where(eq(quotes.id, Number(token)))
+      .limit(1);
+  }
+
+  if (!quote) {
+    [quote] = await db
+      .select()
+      .from(quotes)
+      .where(eq(quotes.quoteNumber, token))
+      .limit(1);
+  }
+
   if (!quote && (token === "active" || token === "q-1")) {
     [quote] = await db
       .select()
@@ -112,8 +128,11 @@ export async function getSanitizedQuote(token: string) {
   }));
 
   return {
+    id: quote.id,
     quote_number: quote.quoteNumber,
+    portal_token: quote.portalToken,
     customer_name: customer?.name || "Customer",
+    customer_email: customer?.email || "",
     status: quote.status,
     subtotal: Number(quote.subtotal),
     total_discount: Number(quote.totalDiscount),
@@ -135,6 +154,8 @@ export async function addPortalComment(
     quote_line_id?: number;
     message: string;
     counter_discount_pct?: number;
+    author_type?: string;
+    author_name?: string;
   }
 ) {
   const { quote, customer } = await getQuoteByTokenOrThrow(token);
@@ -159,8 +180,8 @@ export async function addPortalComment(
     .values({
       quoteId: quote.id,
       quoteLineId: input.quote_line_id ?? null,
-      authorType: "customer",
-      authorName: customer?.name || "Customer",
+      authorType: input.author_type || "customer",
+      authorName: input.author_name || customer?.name || "Customer",
       message: input.message,
       counterDiscountPct:
         input.counter_discount_pct !== undefined ? input.counter_discount_pct.toFixed(2) : null,
@@ -251,6 +272,23 @@ export async function confirmPortalQuote(token: string) {
       ? `Customer confirmed via portal with counter-offer of ${latestCounter.counterDiscountPct}%: "${latestCounter.message}"`
       : "Customer confirmed and accepted quotation terms via portal magic link",
   });
+
+  // Persist response message to portal negotiation comments
+  if (newStatus === "pending_manager" && latestCounter) {
+    await db.insert(portalComments).values({
+      quoteId: quote.id,
+      authorType: "rep",
+      authorName: "Sales Management Desk",
+      message: `Status update: Counter-proposal of ${latestCounter.counterDiscountPct}% discount received. Quotation status updated to Pending Approval for manager review.`,
+    });
+  } else if (newStatus === "fulfillment") {
+    await db.insert(portalComments).values({
+      quoteId: quote.id,
+      authorType: "rep",
+      authorName: "Operations & Fulfillment",
+      message: "Quotation officially confirmed and accepted! Converted to active order for fulfillment.",
+    });
+  }
 
   // If quote moved to fulfillment and has recurring lines, eagerly spawn subscriptions
   if (newStatus === "fulfillment") {

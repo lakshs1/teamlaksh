@@ -121,3 +121,19 @@ export async function demoLogin(
     next(error);
   }
 }
+
+export async function getUsers(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await authService.getAllUsers();
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
