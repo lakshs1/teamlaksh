@@ -219,7 +219,6 @@ export async function listQuotes(query: {
   const offset = (page - 1) * limit;
 
   const conditions = [];
-  if (query.status) conditions.push(eq(quotes.status, query.status));
   if (query.status) {
     if (query.status.includes(",")) {
       const statuses = query.status.split(",").map((s) => s.trim()).filter(Boolean);

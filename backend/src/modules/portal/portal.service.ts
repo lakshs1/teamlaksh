@@ -127,6 +127,42 @@ export async function getSanitizedQuote(token: string) {
     created_at: c.createdAt,
   }));
 
+  const subtotal = Number(quote.subtotal);
+  const totalDiscount = Number(quote.totalDiscount);
+  const totalTax = Number(quote.totalTax);
+  const grandTotal = Number(quote.grandTotal);
+  const overallDiscountPct =
+    subtotal > 0 && totalDiscount > 0
+      ? Number(((totalDiscount / subtotal) * 100).toFixed(1))
+      : sanitizedLines.length > 0 && sanitizedLines.some((l) => l.discount_pct > 0)
+      ? Number(
+          (
+            sanitizedLines.reduce((acc, l) => acc + l.discount_pct * (l.unit_price * l.quantity), 0) /
+            Math.max(1, sanitizedLines.reduce((acc, l) => acc + l.unit_price * l.quantity, 0))
+          ).toFixed(1)
+        )
+      : 0;
+
+  let customerQuotes: Array<{ id: number; quote_number: string; portal_token: string | null; grand_total: number; status: string; created_at: Date }> = [];
+  if (customer?.id) {
+    const custQuotes = await db
+      .select({
+        id: quotes.id,
+        quote_number: quotes.quoteNumber,
+        portal_token: quotes.portalToken,
+        grand_total: quotes.grandTotal,
+        status: quotes.status,
+        created_at: quotes.createdAt,
+      })
+      .from(quotes)
+      .where(eq(quotes.customerId, customer.id))
+      .orderBy(desc(quotes.createdAt));
+    customerQuotes = custQuotes.map((q) => ({
+      ...q,
+      grand_total: Number(q.grand_total),
+    }));
+  }
+
   return {
     id: quote.id,
     quote_number: quote.quoteNumber,
@@ -134,13 +170,15 @@ export async function getSanitizedQuote(token: string) {
     customer_name: customer?.name || "Customer",
     customer_email: customer?.email || "",
     status: quote.status,
-    subtotal: Number(quote.subtotal),
-    total_discount: Number(quote.totalDiscount),
-    total_tax: Number(quote.totalTax),
-    grand_total: Number(quote.grandTotal),
+    subtotal,
+    total_discount: totalDiscount,
+    total_tax: totalTax,
+    grand_total: grandTotal,
+    discount_pct: overallDiscountPct,
     expires_at: quote.expiresAt,
     lines: sanitizedLines,
     comments: sanitizedComments,
+    customer_quotes: customerQuotes,
   };
 }
 

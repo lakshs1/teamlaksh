@@ -63,9 +63,11 @@ export const sanitizedQuoteResponseSchema = z
     total_discount: z.number().openapi({ example: 500.0 }),
     total_tax: z.number().openapi({ example: 382.5 }),
     grand_total: z.number().openapi({ example: 4882.5 }),
+    discount_pct: z.number().optional().openapi({ example: 10.0 }),
     expires_at: z.coerce.date().nullable().optional(),
     lines: z.array(sanitizedQuoteLineSchema),
     comments: z.array(portalCommentResponseSchema),
+    customer_quotes: z.array(z.any()).optional(),
   })
   .openapi("SanitizedQuoteResponse");
 

@@ -81,6 +81,10 @@ export default function CustomerPortalPage() {
     );
 
     if (matchingStoreQuote) {
+      const storeGross = matchingStoreQuote.lines.reduce((acc, l) => acc + l.quantity * l.unitPrice, 0);
+      const storeDiscAmt = matchingStoreQuote.lines.reduce((acc, l) => acc + l.quantity * l.unitPrice * (l.discount / 100), 0);
+      const storeDiscPct = storeGross > 0 ? Number(((storeDiscAmt / storeGross) * 100).toFixed(1)) : 0;
+
       setLiveQuote({
         id: matchingStoreQuote.id,
         reference: matchingStoreQuote.reference,
@@ -90,6 +94,9 @@ export default function CustomerPortalPage() {
         status: matchingStoreQuote.status,
         date: matchingStoreQuote.date,
         expires_at: matchingStoreQuote.expiryDate,
+        subtotal: storeGross,
+        total_discount: storeDiscAmt,
+        discount_pct: storeDiscPct,
         untaxed_amount: matchingStoreQuote.untaxedAmount,
         tax_amount: matchingStoreQuote.taxAmount,
         total_amount: matchingStoreQuote.totalAmount,
@@ -121,8 +128,46 @@ export default function CustomerPortalPage() {
             ? 'Confirmed'
             : data.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Sent';
 
+        const rawSubtotal = Number(data.subtotal || data.untaxed_amount || 0);
+        const rawDiscount = Number(data.total_discount || data.discount_amount || 0);
+        const rawTax = Number(data.total_tax || data.tax_amount || 0);
+        const rawGrand = Number(data.grand_total || data.total_amount || 0);
+        const rawLines = Array.isArray(data.lines) ? data.lines : [];
+
+        const computedDiscountPct =
+          data.discount_pct !== undefined && data.discount_pct !== null && Number(data.discount_pct) > 0
+            ? Number(data.discount_pct)
+            : rawSubtotal > 0 && rawDiscount > 0
+            ? Number(((rawDiscount / rawSubtotal) * 100).toFixed(1))
+            : rawLines.length > 0 && rawLines.some((l: any) => Number(l.discount_pct || l.discountPct || l.discount || 0) > 0)
+            ? Number(
+                (
+                  rawLines.reduce(
+                    (acc: number, l: any) =>
+                      acc +
+                      Number(l.discount_pct || l.discountPct || l.discount || 0) *
+                        (Number(l.unit_price || l.unitPrice || 0) * Number(l.quantity || 1)),
+                    0
+                  ) /
+                  Math.max(
+                    1,
+                    rawLines.reduce(
+                      (acc: number, l: any) =>
+                        acc + Number(l.unit_price || l.unitPrice || 0) * Number(l.quantity || 1),
+                      0
+                    )
+                  )
+                ).toFixed(1)
+              )
+            : 0;
+
         setLiveQuote({
           ...data,
+          subtotal: rawSubtotal,
+          total_discount: rawDiscount,
+          total_tax: rawTax,
+          grand_total: rawGrand,
+          discount_pct: computedDiscountPct,
           status: displayStatus,
         });
 
@@ -373,7 +418,27 @@ export default function CustomerPortalPage() {
             <div style={{ fontSize: '0.8125rem', color: '#64748B' }}>{customerEmail} • Customer Portal View</div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {liveQuote?.customer_quotes && Array.isArray(liveQuote.customer_quotes) && liveQuote.customer_quotes.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <span style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Quotation:</span>
+              <select
+                className="odoo-select"
+                value={liveQuote?.portal_token || liveQuote?.id}
+                onChange={(e) => {
+                  const selectedToken = e.target.value;
+                  navigate(`/portal/${selectedToken}`);
+                }}
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: 6, border: '1px solid #CBD5E1', backgroundColor: '#F8FAFC', color: '#1F2937', fontWeight: 600 }}
+              >
+                {liveQuote.customer_quotes.map((cq: any) => (
+                  <option key={cq.id} value={cq.portal_token || cq.id}>
+                    {cq.quote_number} (₹{Math.round(cq.grand_total).toLocaleString()})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <span className="odoo-badge" style={{ background: '#714B67', color: '#FFF', padding: '0.3rem 0.8rem' }}>
             {liveQuote?.status ? `Status: ${liveQuote.status}` : 'Bronze Tier Account'}
           </span>
@@ -522,33 +587,63 @@ export default function CustomerPortalPage() {
                       </p>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {quoteLines.map((line: any, idx: number) => (
-                        <div
-                          key={line.id || idx}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '0.75rem',
-                            background: '#F8FAFC',
-                            borderRadius: 6,
-                            border: '1px solid #E2E8F0',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1F2937' }}>
-                              {line.product_name || line.productName || 'Item'}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      {quoteLines.map((line: any, idx: number) => {
+                        const lineQty = Number(line.quantity || 1);
+                        const lineUnitPrice = Number(line.unit_price || line.unitPrice || 0);
+                        const lineDiscPct = Number(line.discount_pct ?? line.discountPct ?? line.discount ?? 0);
+                        const lineGross = lineQty * lineUnitPrice;
+                        const lineDiscAmt = Number(line.discount_amount || line.discountAmount || (lineGross * (lineDiscPct / 100)));
+                        const lineNet = Number(line.line_total || line.total || (lineGross - lineDiscAmt));
+
+                        return (
+                          <div
+                            key={line.id || idx}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '0.85rem 1rem',
+                              background: '#F8FAFC',
+                              borderRadius: 8,
+                              border: '1px solid #E2E8F0',
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1F2937' }}>
+                                {line.product_name || line.productName || 'Item'}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                                <span>Qty: {lineQty} • Unit Price: ₹{lineUnitPrice.toLocaleString()}</span>
+                                {lineDiscPct > 0 && (
+                                  <span
+                                    style={{
+                                      backgroundColor: '#DCFCE7',
+                                      color: '#15803D',
+                                      padding: '0.1rem 0.45rem',
+                                      borderRadius: 4,
+                                      fontWeight: 600,
+                                      fontSize: '0.7rem',
+                                    }}
+                                  >
+                                    {lineDiscPct}% off (-₹{Math.round(lineDiscAmt).toLocaleString()})
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '0.75rem', color: '#64748B' }}>
-                              Qty: {line.quantity} • Unit Price: ₹{(line.unit_price || line.unitPrice || 0).toLocaleString()}
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#714B67' }}>
+                                ₹{Math.round(lineNet).toLocaleString()}
+                              </div>
+                              {lineDiscPct > 0 && (
+                                <div style={{ fontSize: '0.75rem', color: '#94A3B8', textDecoration: 'line-through' }}>
+                                  ₹{Math.round(lineGross).toLocaleString()}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#714B67' }}>
-                            ₹{(line.line_total || line.total || (line.quantity * (line.unit_price || line.unitPrice || 0))).toLocaleString()}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -646,26 +741,92 @@ export default function CustomerPortalPage() {
                     Current Offer Terms
                   </h3>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Total Amount:</span>
-                      <span style={{ fontWeight: 700, color: '#1F2937' }}>
-                        ₹{(liveQuote?.grand_total || liveQuote?.total_amount || 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Applied Discount:</span>
-                      <span style={{ fontWeight: 600, color: '#059669' }}>
-                        {liveQuote?.discount_pct ? `${liveQuote.discount_pct}%` : '0%'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#64748B' }}>Validity:</span>
-                      <span style={{ fontWeight: 600 }}>
-                        {liveQuote?.expires_at ? `Valid till ${new Date(liveQuote.expires_at).toLocaleDateString()}` : 'Valid till 10/6/2026'}
-                      </span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const quoteSubtotal = Number(liveQuote?.subtotal || liveQuote?.untaxed_amount || 0);
+                    const quoteDiscountAmt = Number(liveQuote?.total_discount || liveQuote?.discount_amount || 0);
+                    const quoteTaxAmt = Number(liveQuote?.total_tax || liveQuote?.tax_amount || 0);
+                    const quoteGrandTotal = Number(
+                      liveQuote?.grand_total || liveQuote?.total_amount || (quoteSubtotal - quoteDiscountAmt + quoteTaxAmt)
+                    );
+
+                    const lineAvgDiscount =
+                      quoteLines.length > 0
+                        ? quoteLines.reduce((acc: number, l: any) => acc + Number(l.discount_pct || l.discountPct || l.discount || 0), 0) /
+                          quoteLines.length
+                        : 0;
+
+                    const effectiveDiscountPct = Number(
+                      liveQuote?.discount_pct !== undefined && liveQuote?.discount_pct !== null && Number(liveQuote.discount_pct) > 0
+                        ? liveQuote.discount_pct
+                        : quoteSubtotal > 0 && quoteDiscountAmt > 0
+                        ? ((quoteDiscountAmt / quoteSubtotal) * 100).toFixed(1)
+                        : lineAvgDiscount > 0
+                        ? lineAvgDiscount.toFixed(1)
+                        : 0
+                    );
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                        {quoteSubtotal > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748B' }}>Gross Subtotal:</span>
+                            <span style={{ fontWeight: 600, color: '#475569' }}>
+                              ₹{Math.round(quoteSubtotal).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#64748B' }}>Applied Discount:</span>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color: effectiveDiscountPct > 0 ? '#059669' : '#64748B',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              flexWrap: 'wrap',
+                              justifyContent: 'flex-end',
+                            }}
+                          >
+                            {effectiveDiscountPct > 0 ? (
+                              <>
+                                <span style={{ backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.1rem 0.4rem', borderRadius: 4, fontSize: '0.75rem' }}>
+                                  {effectiveDiscountPct}% OFF
+                                </span>
+                                {quoteDiscountAmt > 0 && <span>(-₹{Math.round(quoteDiscountAmt).toLocaleString()})</span>}
+                              </>
+                            ) : (
+                              '0%'
+                            )}
+                          </span>
+                        </div>
+
+                        {quoteTaxAmt > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748B' }}>Estimated Tax (18%):</span>
+                            <span style={{ fontWeight: 600, color: '#475569' }}>
+                              +₹{Math.round(quoteTaxAmt).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+
+                        <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '0.6rem', marginTop: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <span style={{ color: '#1F2937', fontWeight: 600 }}>Total Amount:</span>
+                          <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#714B67' }}>
+                            ₹{Math.round(quoteGrandTotal).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                          <span style={{ color: '#64748B' }}>Validity:</span>
+                          <span style={{ fontWeight: 600, color: '#475569' }}>
+                            {liveQuote?.expires_at ? `Valid till ${new Date(liveQuote.expires_at).toLocaleDateString()}` : 'Valid for 30 Days'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     <button className="odoo-btn odoo-btn-primary" onClick={handleAcceptOffer} style={{ cursor: 'pointer' }}>

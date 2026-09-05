@@ -1,6 +1,7 @@
 import { Link, useLocation, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import toast from 'react-hot-toast';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 
 export default function BackendLayout() {
   const location = useLocation();
@@ -71,7 +72,9 @@ export default function BackendLayout() {
       </header>
 
       <main style={{ flex: 1 }}>
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );
