@@ -1,5 +1,5 @@
 /**
- * Central schema barrel file exporting authentication & user tables and auto-generated Zod schemas.
+ * Central schema barrel file exporting all DealFlow360 tables and Zod schemas.
  */
 export * from "./users.js";
-
+export * from "./dealflow.js";
