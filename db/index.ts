@@ -2,59 +2,66 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import "dotenv/config";
 import * as schema from "./schema.js";
-import { insertUserSchema } from "./schema.js";
 
 const connectionString =
   process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5431/postgres";
 
-// Client for queries
-const queryClient = postgres(connectionString, {
+// Connection pool for queries
+export const queryClient = postgres(connectionString, {
   max: 10,
   idle_timeout: 20,
   connect_timeout: 10,
 });
 
-// Drizzle instance configured with schema
+// Drizzle ORM instance configured with all schemas & relations
 export const db = drizzle(queryClient, { schema });
 
 /**
- * Example helper function with Zod validation
+ * Health check to verify database connectivity. Call at server startup to fail-fast.
  */
-export async function createUser(data: unknown) {
-  // Validate input using Zod schema
-  const validatedData = insertUserSchema.parse(data);
-
-  // Insert into PostgreSQL via Drizzle ORM
-  const [newUser] = await db
-    .insert(schema.users)
-    .values(validatedData as any)
-    .returning();
-
-  return newUser;
-}
-
-/**
- * Quick connection health check
- */
-export async function checkConnection() {
+export async function checkDbConnection(): Promise<boolean> {
   try {
-    const result = await queryClient`SELECT 1 as connected`;
-    console.log(" PostgreSQL connection successful:", result);
+    await queryClient`SELECT 1 as connected`;
+    console.log("✅ PostgreSQL connection successful");
     return true;
   } catch (error) {
-    console.error(" PostgreSQL connection failed:", error);
+    console.error("❌ PostgreSQL connection failed:", error);
     return false;
   }
 }
 
-// Self-test execution when run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  console.log("Testing connection to PostgreSQL on port 5431...");
-  checkConnection().then((success) => {
+// Backwards-compatible alias
+export const checkConnection = checkDbConnection;
+
+/**
+ * Helper function with Zod validation
+ */
+export async function createUser(data: unknown) {
+  const validatedData = schema.insertUserSchema.parse(data);
+  const [newUser] = await db
+    .insert(schema.users)
+    .values(validatedData as any)
+    .returning();
+  return newUser;
+}
+
+// Self-test execution when run directly via tsx / node
+const isMain = process.argv[1] && (
+  import.meta.url === `file://${process.argv[1]}` ||
+  import.meta.url.replace(/\\/g, '/').toLowerCase().endsWith(process.argv[1].replace(/\\/g, '/').toLowerCase())
+);
+
+if (isMain) {
+  console.log("Testing connection to PostgreSQL...");
+  checkDbConnection().then((success) => {
     if (success) {
       console.log("Ready to accept queries.");
+      process.exit(0);
+    } else {
+      process.exit(1);
     }
   });
 }
 
+// Re-export all tables, relations, Zod schemas, and types
 export * from "./schema.js";

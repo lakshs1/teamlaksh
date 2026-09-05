@@ -1,6 +1,6 @@
 import { app, logger } from "./app.js";
 import { env } from "./config/env.js";
-import { checkDbConnection } from "./config/db.js";
+import { checkDbConnection } from "@db";
 
 async function main() {
   // ── Validate DB connection ────────────────────────────────

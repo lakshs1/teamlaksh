@@ -1,10 +1,8 @@
 import { eq } from "drizzle-orm";
-import { db } from "../../config/db.js";
-import { users } from "../../db/schema/index.js";
+import { db, users, type SafeUser } from "@db";
 import { hashPassword, comparePassword } from "../../lib/password.js";
 import { generateTokenPair, verifyRefreshToken } from "../../lib/jwt.js";
 import { ApiError } from "../../lib/api-error.js";
-import type { SafeUser } from "../../db/schema/index.js";
 
 // ═══════════════════════════════════════════════════════════
 // AUTH SERVICE — DealFlow360 Auth Business Logic
