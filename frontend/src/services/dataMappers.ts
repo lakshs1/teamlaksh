@@ -94,16 +94,25 @@ export function mapApproval(q: any): ApprovalItem {
     note: log.reason || log.note || undefined,
   }));
 
+  const isApproved = q.status === 'approved';
+  const isRejected = q.status === 'rejected';
+
   return {
     id: str(q.id),
-    reference: `APP/${str(q.id).padStart(5, '0')}`,
+    reference: q.quoteNumber || `QT-${str(q.id).padStart(4, '0')}`,
     quotationId: str(q.id),
-    customerName: q.customer?.name || q.customerName || 'Unknown',
+    customerName: q.customer?.name || q.customerName || 'Unknown Customer',
+    customerTier: q.customer?.tier?.name || q.customerTier || 'Gold Tier',
     requestType: 'Discount Approval',
     amount: num(q.grandTotal),
+    totalDiscount: num(q.totalDiscount),
     requestedBy: q.rep?.name || q.requestedBy || 'Sales Rep',
     requestedDate: dateStr(q.createdAt),
-    status: q.status === 'approved' ? 'Approved' : q.status === 'rejected' ? 'Rejected' : 'Pending',
+    status: isApproved ? 'Approved' : isRejected ? 'Rejected' : 'Pending',
+    currentStatus: q.status,
+    approvalRoute: q.approvalRoute || 'manager',
+    canAct: q.canAct ?? false,
+    requiredLevelText: q.requiredLevelText || (q.approvalRoute === 'manager_finance' ? 'Level 2: Finance & Operations' : 'Level 1: Manager Review'),
     blendedRiskScore: num(q.blendedRiskScore),
     reason: q.notes || '',
     auditTrail,

@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { approvalApi, quoteApi } from '../../services/apiServices';
 import { mapApproval } from '../../services/dataMappers';
-import type { ApprovalItem } from '../../stores/dealflowStore';
+import { useDealFlowStore, type ApprovalItem } from '../../stores/dealflowStore';
+import { useAuthStore } from '../../stores/authStore';
 import toast from 'react-hot-toast';
 
 export default function ApprovalDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { currentRole } = useDealFlowStore();
+  const { user } = useAuthStore();
   const [item, setItem] = useState<ApprovalItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export default function ApprovalDetailPage() {
     if (!id) return;
     try {
       setSubmitting(true);
-      const res = await approvalApi.approveQuote(id, 'Approved by reviewer in Sales Operations Hub');
+      const res = await approvalApi.approveQuote(id, `Approved by ${user?.name || currentRole} in Sales Operations Hub`);
       const msg = res?.data?.message || res?.message || 'Approval granted!';
       toast.success(msg);
       await fetchDetails();
@@ -79,7 +82,16 @@ export default function ApprovalDetailPage() {
   if (error || !item) return <div className="odoo-container"><div className="p-8 text-red-500">Error: {error || 'Not found'}</div></div>;
 
   const riskNum = parseFloat(String(item.blendedRiskScore)) || 0;
-  const isLevel2 = riskNum > 25;
+  const isLevel2 = riskNum > 25 || item.approvalRoute === 'manager_finance';
+
+  const isManagerRole = currentRole === 'Sales Manager' || (user?.role as string) === 'manager' || user?.role === 'MANAGER';
+  const isFinanceRole = currentRole === 'Finance & Operations' || currentRole === 'Finance' || ['finance', 'operations', 'finance_operations'].includes((user?.role as string) || '');
+  const isAdminRole = currentRole === 'Admin' || (user?.role as string) === 'admin' || user?.role === 'ADMIN';
+
+  const canAct =
+    isAdminRole ||
+    (isManagerRole && item.currentStatus === 'pending_manager') ||
+    (isFinanceRole && item.currentStatus === 'pending_finance');
 
   return (
     <div className="odoo-container">
@@ -92,8 +104,8 @@ export default function ApprovalDetailPage() {
             {item.reference}
           </h1>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {item.status === 'Pending' && (
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {item.status === 'Pending' && canAct && (
             <>
               <button className="odoo-btn odoo-btn-primary" onClick={handleApprove} disabled={submitting}>
                 {submitting ? 'Processing...' : 'Approve'}
@@ -119,6 +131,23 @@ export default function ApprovalDetailPage() {
                 Request Revision
               </button>
             </>
+          )}
+          {item.status === 'Pending' && !canAct && (
+            <span
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: '#64748B',
+                backgroundColor: '#F1F5F9',
+                padding: '0.35rem 0.75rem',
+                borderRadius: 6,
+                border: '1px solid #E2E8F0',
+              }}
+            >
+              {item.currentStatus === 'pending_manager'
+                ? '⏳ Awaiting Level 1 Manager sign-off'
+                : '⚡ Awaiting Level 2 Finance sign-off'}
+            </span>
           )}
           <button className="odoo-btn odoo-btn-secondary" onClick={() => navigate('/approvals')}>
             Back to List
@@ -162,7 +191,7 @@ export default function ApprovalDetailPage() {
               <div><strong>Total Deal Amount:</strong> ₹{item.amount.toLocaleString('en-IN')}</div>
               <div>
                 <strong>Blended Discount Risk Score:</strong>{' '}
-                <span className="odoo-badge" style={{ backgroundColor: isLevel2 ? '#FEE2E2' : '#F1F5F9', color: isLevel2 ? '#991B1B' : '#334155' }}>
+                <span className="odoo-badge">
                   {item.blendedRiskScore}%
                 </span>
               </div>
@@ -248,7 +277,7 @@ export default function ApprovalDetailPage() {
             width: '90%',
             boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
           }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: modalType === 'reject' ? '#DC2626' : '#714B67', marginBottom: '0.5rem' }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#714B67', marginBottom: '0.5rem' }}>
               {modalType === 'reject' ? 'Confirm Quotation Rejection' : 'Request Quotation Revision'}
             </h2>
             <p style={{ fontSize: '0.875rem', color: '#64748B', marginBottom: '1rem' }}>

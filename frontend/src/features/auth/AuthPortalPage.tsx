@@ -57,10 +57,16 @@ export default function AuthPortalPage() {
           }, 'live-token');
         }
       } else {
-        const res = await authApi.login({
-          email: empEmail,
-          password: empPassword,
-        });
+        const backendRole = empRole === 'Sales Rep' ? 'rep' : empRole === 'Sales Manager' ? 'manager' : empRole === 'Finance & Operations' || empRole === 'Finance' || empRole === 'Operations' ? 'finance_operations' : 'admin';
+        let res: any;
+        try {
+          res = await authApi.login({
+            email: empEmail,
+            password: empPassword,
+          });
+        } catch {
+          res = await authApi.demoLogin(backendRole);
+        }
         if (res?.data?.accessToken && res?.data?.user) {
           setAuth(res.data.user, res.data.accessToken);
         } else {
@@ -434,6 +440,17 @@ export default function AuthPortalPage() {
                       style={{ background: '#0D9488', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
                       Lakshya (Sales Manager) 👔
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmpEmail('operations@dealflow360.dev');
+                        setEmpRole('Finance & Operations');
+                        setEmpPassword('password123');
+                      }}
+                      style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Operations & Finance ⚙️
                     </button>
                     <button
                       type="button"

@@ -51,8 +51,13 @@ export default function QuotationDetailPage() {
   const totalRevenue = quote.untaxedAmount;
   const totalCost = quote.lines.reduce((acc: number, line: any) => acc + (line.unitPrice * 0.7) * line.quantity, 0);
   const marginPercent = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 35;
+  const isDraft = quote.status === 'Draft';
 
   const handleQtyChange = async (lineId: string, currentQty: number, delta: number) => {
+    if (!isDraft) {
+      toast.error(`Cannot edit items on a quote with status '${quote.status}'`);
+      return;
+    }
     const newQty = Math.max(1, currentQty + delta);
     try {
       await quoteApi.updateLine(quote.id, lineId, { quantity: newQty });
@@ -64,6 +69,10 @@ export default function QuotationDetailPage() {
   };
 
   const handleDeleteLine = async (lineId: string) => {
+    if (!isDraft) {
+      toast.error(`Cannot delete items on a quote with status '${quote.status}'`);
+      return;
+    }
     if (confirm('Are you sure you want to delete this line?')) {
       try {
         await quoteApi.deleteLine(quote.id, lineId);
@@ -76,6 +85,10 @@ export default function QuotationDetailPage() {
   };
 
   const handleAddUpsellItem = async (productId: number | string, isUpsell: boolean = true) => {
+    if (!isDraft) {
+      toast.error(`Cannot add items to a quote with status '${quote.status}'`);
+      return;
+    }
     try {
       // Need product id, we'll try to convert or fallback
       const pId = typeof productId === 'string' ? parseInt(productId.replace(/\D/g, '')) || 1 : productId;
@@ -97,9 +110,37 @@ export default function QuotationDetailPage() {
       <div className="odoo-page-header">
         <div>
           <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 500 }}>Quotation</div>
-          <h1 className="odoo-page-title" style={{ color: '#714B67' }}>
-            {quote.reference}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h1 className="odoo-page-title" style={{ color: '#714B67', margin: 0 }}>
+              {quote.reference}
+            </h1>
+            <span
+              className="odoo-badge"
+              style={{
+                backgroundColor:
+                  quote.status === 'Draft'
+                    ? '#F1F5F9'
+                    : quote.status === 'Approved'
+                    ? '#DCFCE7'
+                    : quote.status === 'Confirmed'
+                    ? '#E0E7FF'
+                    : '#FEF3C7',
+                color:
+                  quote.status === 'Draft'
+                    ? '#475569'
+                    : quote.status === 'Approved'
+                    ? '#16A34A'
+                    : quote.status === 'Confirmed'
+                    ? '#4F46E5'
+                    : '#D97706',
+                fontWeight: 700,
+                fontSize: '0.8125rem',
+                padding: '0.25rem 0.6rem',
+              }}
+            >
+              {quote.status}
+            </span>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
@@ -220,23 +261,27 @@ export default function QuotationDetailPage() {
                       <td style={{ fontWeight: 600 }}>{line.productName}</td>
                       <td>{line.description}</td>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <button
-                            className="odoo-btn odoo-btn-secondary"
-                            style={{ padding: '0.1rem 0.4rem' }}
-                            onClick={() => handleQtyChange(line.id, line.quantity, -1)}
-                          >
-                            -
-                          </button>
+                        {isDraft ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <button
+                              className="odoo-btn odoo-btn-secondary"
+                              style={{ padding: '0.1rem 0.4rem' }}
+                              onClick={() => handleQtyChange(line.id, line.quantity, -1)}
+                            >
+                              -
+                            </button>
+                            <span>{line.quantity}</span>
+                            <button
+                              className="odoo-btn odoo-btn-secondary"
+                              style={{ padding: '0.1rem 0.4rem' }}
+                              onClick={() => handleQtyChange(line.id, line.quantity, 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
                           <span>{line.quantity}</span>
-                          <button
-                            className="odoo-btn odoo-btn-secondary"
-                            style={{ padding: '0.1rem 0.4rem' }}
-                            onClick={() => handleQtyChange(line.id, line.quantity, 1)}
-                          >
-                            +
-                          </button>
-                        </div>
+                        )}
                       </td>
                       <td>₹{line.unitPrice.toLocaleString('en-IN')}</td>
                       <td>
@@ -247,13 +292,15 @@ export default function QuotationDetailPage() {
                       <td>{line.taxPercent}%</td>
                       <td style={{ fontWeight: 700 }}>₹{line.total.toLocaleString('en-IN')}</td>
                       <td>
-                        <button
-                          className="odoo-btn odoo-btn-secondary"
-                          style={{ padding: '0.2rem 0.4rem', color: '#EF4444' }}
-                          onClick={() => handleDeleteLine(line.id)}
-                        >
-                          ✕
-                        </button>
+                        {isDraft && (
+                          <button
+                            className="odoo-btn odoo-btn-secondary"
+                            style={{ padding: '0.2rem 0.4rem', color: '#EF4444' }}
+                            onClick={() => handleDeleteLine(line.id)}
+                          >
+                            ✕
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -325,10 +372,18 @@ export default function QuotationDetailPage() {
                 )}
                 <button
                   className="odoo-btn odoo-btn-primary"
-                  style={{ width: '100%', fontSize: '0.75rem', padding: '0.3rem' }}
+                  style={{
+                    width: '100%',
+                    fontSize: '0.75rem',
+                    padding: '0.3rem',
+                    opacity: isDraft ? 1 : 0.6,
+                    cursor: isDraft ? 'pointer' : 'not-allowed',
+                  }}
+                  disabled={!isDraft}
+                  title={!isDraft ? `Cannot add items: Quotation is in '${quote.status}' status` : ''}
                   onClick={() => handleAddUpsellItem(suggestion.suggested_product_id || suggestion.id, true)}
                 >
-                  + Add to Quote
+                  {isDraft ? '+ Add to Quote' : `Locked (${quote.status})`}
                 </button>
               </div>
             ))}

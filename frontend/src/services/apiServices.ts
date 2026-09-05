@@ -154,6 +154,10 @@ export const quoteApi = {
 
 // 5. Approvals API
 export const approvalApi = {
+  getApprovals: async (params?: { status?: string; scope?: string }) => {
+    const res = await api.get('/approvals', { params });
+    return res.data;
+  },
   getPendingApprovals: async () => {
     const res = await api.get('/approvals/pending');
     return res.data;

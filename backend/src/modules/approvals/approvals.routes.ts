@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authenticate, authorize } from "../../middleware/auth.middleware.js";
 import {
+  listApprovalsHandler,
   getPendingApprovalsHandler,
   getApprovalLogsHandler,
   approveQuoteHandler,
@@ -10,8 +11,9 @@ import {
 
 const router = Router();
 
-// ── Approval Queue ────────────────────────────────────────
-router.get("/pending", authenticate, authorize("manager", "finance", "operations", "finance_operations", "admin", "rep"), getPendingApprovalsHandler);
+// ── Approval Governance Queue ─────────────────────────────
+router.get("/", authenticate, authorize("manager", "finance", "operations", "finance_operations", "admin"), listApprovalsHandler);
+router.get("/pending", authenticate, authorize("manager", "finance", "operations", "finance_operations", "admin"), getPendingApprovalsHandler);
 
 // ── Audit Trail ───────────────────────────────────────────
 router.get("/quotes/:quoteId/logs", authenticate, getApprovalLogsHandler);

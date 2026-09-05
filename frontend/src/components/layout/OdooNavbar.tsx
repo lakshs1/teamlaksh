@@ -24,6 +24,7 @@ export default function OdooNavbar() {
     { label: 'Invoices', path: '/invoices', roles: ['Finance & Operations', 'Finance', 'Admin'] },
     { label: 'Deal Health', path: '/deal-health', roles: ['Sales Manager', 'Admin'] },
     { label: 'Discount Rules', path: '/settings/discount-rules', roles: ['Sales Manager', 'Admin'] },
+    { label: 'Reports', path: '/reports', roles: ['Sales Rep', 'Sales Manager', 'Finance & Operations', 'Finance', 'Operations', 'Admin'] },
   ];
 
   const navItems = allNavItems.filter((item) => item.roles.includes(currentRole));
@@ -64,13 +65,22 @@ export default function OdooNavbar() {
     const backendRole = roleMap[selectedRoleStr] || 'rep';
     try {
       const { authApi } = await import('../../services/apiServices');
-      const res = await authApi.demoLogin(backendRole);
+      let res: any;
+      try {
+        res = await authApi.switchRole(backendRole);
+      } catch {
+        res = await authApi.demoLogin(backendRole);
+      }
       if (res?.data?.user && res?.data?.accessToken) {
         useAuthStore.getState().setAuth(res.data.user, res.data.accessToken);
+      } else if (res?.data?.accessToken) {
+        useAuthStore.getState().setAuth(res.data.user || user, res.data.accessToken);
       }
       toast.success(`Role switched to ${selectedRoleStr}`);
-    } catch {
-      // fallback
+      window.dispatchEvent(new CustomEvent('dealflow:role-changed', { detail: { role: selectedRoleStr, backendRole } }));
+    } catch (err: any) {
+      console.warn('Role switch error:', err);
+      window.dispatchEvent(new CustomEvent('dealflow:role-changed', { detail: { role: selectedRoleStr, backendRole } }));
     }
   };
 

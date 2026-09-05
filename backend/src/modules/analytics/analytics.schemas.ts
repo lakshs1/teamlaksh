@@ -32,10 +32,11 @@ export type EscalateAlertInput = z.infer<typeof escalateAlertSchema>;
 
 export const salesReportQuerySchema = z.object({
   period: z
-    .enum(["weekly", "monthly", "quarterly", "yearly", "all"])
+    .enum(["today", "weekly", "monthly", "quarterly", "yearly", "all"])
     .default("monthly"),
   rep_id: z.coerce.number().int().positive().optional(),
   category_id: z.coerce.number().int().positive().optional(),
+  product_id: z.coerce.number().int().positive().optional(),
   status: z.string().optional(),
 });
 

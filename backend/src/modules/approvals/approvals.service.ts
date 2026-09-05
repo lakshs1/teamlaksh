@@ -1,5 +1,5 @@
 import { eq, and, inArray, desc } from "drizzle-orm";
-import { db, quotes, approvalLogs, customers, users } from "@db";
+import { db, quotes, approvalLogs, customers, users, customerTiers } from "@db";
 import { ApiError } from "../../lib/api-error.js";
 
 // ═══════════════════════════════════════════════════════════
@@ -30,6 +30,132 @@ function levelForRole(role: ReviewerRole): string {
 // ═══════════════════════════════════════════════════════════
 // READ
 // ═══════════════════════════════════════════════════════════
+
+/**
+ * Full Approval Governance Queue — returns quotes across all governance states
+ * with enriched customer, customer tier, sales rep data, and canAct calculation.
+ */
+export async function getApprovalsQueue(
+  reviewer: { id: number; role: string },
+  query: { status?: string; scope?: string } = {}
+) {
+  const allRows = await db
+    .select({
+      id: quotes.id,
+      quoteNumber: quotes.quoteNumber,
+      customerId: quotes.customerId,
+      repId: quotes.repId,
+      status: quotes.status,
+      subtotal: quotes.subtotal,
+      totalDiscount: quotes.totalDiscount,
+      totalTax: quotes.totalTax,
+      grandTotal: quotes.grandTotal,
+      blendedRiskScore: quotes.blendedRiskScore,
+      approvalRoute: quotes.approvalRoute,
+      notes: quotes.notes,
+      expiresAt: quotes.expiresAt,
+      createdAt: quotes.createdAt,
+      updatedAt: quotes.updatedAt,
+      customer: {
+        id: customers.id,
+        name: customers.name,
+        email: customers.email,
+      },
+      tierName: customerTiers.name,
+      rep: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
+    })
+    .from(quotes)
+    .leftJoin(customers, eq(quotes.customerId, customers.id))
+    .leftJoin(customerTiers, eq(customers.tierId, customerTiers.id))
+    .leftJoin(users, eq(quotes.repId, users.id))
+    .orderBy(desc(quotes.updatedAt));
+
+  // Determine quotes that are part of the discount approval governance flow
+  const governanceQuotes = allRows.filter((q) => {
+    const isApprovalStatus = [
+      PENDING_MANAGER_STATUS,
+      PENDING_FINANCE_STATUS,
+      "approved",
+      "rejected",
+      "revision",
+    ].includes(q.status);
+    const hasRoute = q.approvalRoute === "manager" || q.approvalRoute === "manager_finance";
+    const hasRisk = parseFloat(String(q.blendedRiskScore || "0")) > 0;
+    return isApprovalStatus || hasRoute || hasRisk;
+  });
+
+  // Calculate canAct and stage per reviewer
+  const isManager = reviewer.role === "manager";
+  const isFinanceOps =
+    reviewer.role === "finance" ||
+    reviewer.role === "operations" ||
+    reviewer.role === "finance_operations";
+  const isAdmin = reviewer.role === "admin";
+
+  const enriched: any[] = governanceQuotes.map((q: any) => {
+    const canAct =
+      (isAdmin && [PENDING_MANAGER_STATUS, PENDING_FINANCE_STATUS].includes(q.status)) ||
+      (isManager && q.status === PENDING_MANAGER_STATUS) ||
+      (isFinanceOps && q.status === PENDING_FINANCE_STATUS);
+
+    let currentStage = "approved";
+    if (q.status === PENDING_MANAGER_STATUS) currentStage = "manager";
+    else if (q.status === PENDING_FINANCE_STATUS) currentStage = "finance";
+    else if (q.status === "rejected") currentStage = "rejected";
+    else if (q.status === "revision") currentStage = "revision";
+
+    let requiredLevelText = "Level 1: Manager Review";
+    if (q.approvalRoute === "manager_finance" || parseFloat(String(q.blendedRiskScore || "0")) > 25) {
+      requiredLevelText = "Level 2: Finance & Operations";
+    }
+
+    return {
+      ...q,
+      customer: {
+        ...q.customer,
+        tier: {
+          name: q.tierName || "Standard",
+        },
+      },
+      canAct,
+      currentStage,
+      requiredLevelText,
+    };
+  });
+
+  // Overall counts
+  const stats = {
+    total: enriched.length,
+    myQueue: enriched.filter((q: any) => q.canAct).length,
+    pendingManager: enriched.filter((q: any) => q.status === PENDING_MANAGER_STATUS).length,
+    pendingFinance: enriched.filter((q: any) => q.status === PENDING_FINANCE_STATUS).length,
+    approved: enriched.filter((q: any) => q.status === "approved").length,
+    rejected: enriched.filter((q: any) => q.status === "rejected").length,
+  };
+
+  // Filter application
+  let filtered = enriched;
+  if (query.scope === "my_queue") {
+    filtered = filtered.filter((q: any) => q.canAct);
+  } else if (query.status === "pending") {
+    filtered = filtered.filter(
+      (q: any) => q.status === PENDING_MANAGER_STATUS || q.status === PENDING_FINANCE_STATUS
+    );
+  } else if (query.status === "approved") {
+    filtered = filtered.filter((q: any) => q.status === "approved");
+  } else if (query.status === "rejected") {
+    filtered = filtered.filter((q: any) => q.status === "rejected");
+  }
+
+  return {
+    items: filtered,
+    stats,
+  };
+}
 
 /**
  * Returns quotes pending this reviewer's action, role-gated:
@@ -76,13 +202,29 @@ export async function getPendingApprovals(reviewer: { id: number; role: string }
         name: customers.name,
         email: customers.email,
       },
+      tierName: customerTiers.name,
+      rep: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
     })
     .from(quotes)
     .leftJoin(customers, eq(quotes.customerId, customers.id))
+    .leftJoin(customerTiers, eq(customers.tierId, customerTiers.id))
+    .leftJoin(users, eq(quotes.repId, users.id))
     .where(and(...conditions))
     .orderBy(desc(quotes.updatedAt));
 
-  return rows;
+  return rows.map((r) => ({
+    ...r,
+    customer: {
+      ...r.customer,
+      tier: {
+        name: r.tierName || "Standard",
+      },
+    },
+  }));
 }
 
 export async function getApprovalLogs(quoteId: number) {

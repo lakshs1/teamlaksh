@@ -99,6 +99,7 @@ const router = createBrowserRouter([
       { path: '/products', element: <Suspense fallback={<PageLoader />}><ProductCatalogPage /></Suspense> },
       { path: '/products/:id', element: <Suspense fallback={<PageLoader />}><ProductDetailPage /></Suspense> },
       { path: '/settings/discount-rules', element: <Suspense fallback={<PageLoader />}><DiscountRulesPage /></Suspense> },
+      { path: '/reports', element: <Suspense fallback={<PageLoader />}><ReportsPage /></Suspense> },
     ],
   },
 

@@ -43,14 +43,20 @@ export interface Quotation {
 
 export interface ApprovalItem {
   id: string;
-  reference: string; // APP/00012
+  reference: string; // QT-2026-0030
   quotationId: string;
   customerName: string;
+  customerTier?: string;
   requestType: 'Discount Approval' | 'Credit Limit Increase' | 'New Customer Terms';
   amount: number;
+  totalDiscount?: number;
   requestedBy: string;
   requestedDate: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  currentStatus?: string;
+  approvalRoute?: 'auto' | 'manager' | 'manager_finance' | string;
+  canAct?: boolean;
+  requiredLevelText?: string;
   blendedRiskScore: number;
   reason: string;
   auditTrail: { step: string; user: string; status: string; timestamp: string; note?: string }[];

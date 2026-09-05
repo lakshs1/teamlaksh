@@ -14,22 +14,20 @@ import {
 
 const router = Router();
 
-const ALL_INTERNAL_ROLES = ["rep", "admin", "manager", "finance", "operations", "finance_operations"];
-
 // ── Quote CRUD ────────────────────────────────────────────
 router.get("/", authenticate, listQuotesHandler);
-router.post("/", authenticate, authorize(...ALL_INTERNAL_ROLES), createQuoteHandler);
+router.post("/", authenticate, authorize("rep", "admin", "manager"), createQuoteHandler);
 router.get("/:id", authenticate, getQuoteByIdHandler);
-router.patch("/:id", authenticate, authorize(...ALL_INTERNAL_ROLES), updateQuoteHandler);
+router.patch("/:id", authenticate, authorize("rep", "admin", "manager"), updateQuoteHandler);
 
 // ── Line Management ───────────────────────────────────────
-router.post("/:id/lines", authenticate, authorize(...ALL_INTERNAL_ROLES), addLineHandler);
-router.patch("/:id/lines/:lineId", authenticate, authorize(...ALL_INTERNAL_ROLES), updateLineHandler);
-router.delete("/:id/lines/:lineId", authenticate, authorize(...ALL_INTERNAL_ROLES), deleteLineHandler);
+router.post("/:id/lines", authenticate, authorize("rep", "admin", "manager"), addLineHandler);
+router.patch("/:id/lines/:lineId", authenticate, authorize("rep", "admin", "manager"), updateLineHandler);
+router.delete("/:id/lines/:lineId", authenticate, authorize("rep", "admin", "manager"), deleteLineHandler);
 
 // ── State Machine Actions ─────────────────────────────────
-router.post("/:id/submit", authenticate, authorize(...ALL_INTERNAL_ROLES), submitQuoteHandler);
-router.post("/:id/confirm", authenticate, authorize(...ALL_INTERNAL_ROLES), confirmQuoteHandler);
+router.post("/:id/submit", authenticate, authorize("rep", "admin", "manager"), submitQuoteHandler);
+router.post("/:id/confirm", authenticate, authorize("rep", "admin", "manager"), confirmQuoteHandler);
 
 
 export default router;

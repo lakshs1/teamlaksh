@@ -65,12 +65,41 @@ async function seedDemoUsers() {
       console.log(`  ✓ Updated Customer User account: ${existingCustUser.email} (password: password123)`);
     }
 
+    // 5. Ensure Finance & Operations User exists
+    const opsEmail = "operations@dealflow360.dev";
+    const [existingOps] = await db.select().from(users).where(eq(users.email, opsEmail)).limit(1);
+    if (!existingOps) {
+      const [newOps] = await db.insert(users).values({
+        name: "Operations & Finance Lead",
+        email: opsEmail,
+        password: hashedPassword,
+        role: "finance_operations",
+        isActive: true
+      }).returning();
+      console.log(`  ✓ Created Operations User: ${newOps.email} (password: password123)`);
+    } else {
+      await db.update(users).set({ password: hashedPassword, role: "finance_operations" }).where(eq(users.id, existingOps.id));
+      console.log(`  ✓ Updated Operations User: ${existingOps.email} (password: password123)`);
+    }
+
+    // Also ensure demo.operations user has password123
+    const [existingDemoOps] = await db.select().from(users).where(eq(users.email, "demo.operations@dealflow360.dev")).limit(1);
+    if (existingDemoOps) {
+      await db.update(users).set({ password: hashedPassword, role: "finance_operations" }).where(eq(users.id, existingDemoOps.id));
+      console.log(`  ✓ Updated demo.operations password to password123`);
+    }
+
     console.log("\n✅ Demo Users Ready:");
     console.log("---------------------------------------------");
     console.log("👔 Sales Manager:");
     console.log("   Email:    manager@dealflow360.dev");
     console.log("   Password: password123");
     console.log("   Role:     Sales Manager");
+    console.log("---------------------------------------------");
+    console.log("⚙️ Finance & Operations:");
+    console.log("   Email:    operations@dealflow360.dev");
+    console.log("   Password: password123");
+    console.log("   Role:     Finance & Operations");
     console.log("---------------------------------------------");
     console.log("🛒 Customer:");
     console.log("   Email:    customer@acme-corp.com");
