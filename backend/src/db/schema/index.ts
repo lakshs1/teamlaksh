@@ -1,5 +1,5 @@
 /**
- * Central schema barrel file exporting all DealFlow360 tables and Zod schemas.
+ * Central schema barrel file.
+ * Re-exports directly from root db/schema.ts as the single source of truth.
  */
-export * from "./users.js";
-export * from "./dealflow.js";
+export * from "../../../../db/schema.js";

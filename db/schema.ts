@@ -282,7 +282,7 @@ export const warehouseStock = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => ({
+  (t: any) => ({
     warehouseProductUnique: unique().on(t.warehouseId, t.productId),
   })
 );
@@ -388,18 +388,18 @@ export const dealAlerts = pgTable("deal_alerts", {
 // 12. DRIZZLE RELATIONS
 // ============================================================================
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ many }: any) => ({
   quotes: many(quotes),
   approvalLogs: many(approvalLogs),
 }));
 
-export const customerTiersRelations = relations(customerTiers, ({ many }) => ({
+export const customerTiersRelations = relations(customerTiers, ({ many }: any) => ({
   customers: many(customers),
   priceLists: many(priceLists),
   discountRules: many(discountRules),
 }));
 
-export const customersRelations = relations(customers, ({ one, many }) => ({
+export const customersRelations = relations(customers, ({ one, many }: any) => ({
   tier: one(customerTiers, {
     fields: [customers.tierId],
     references: [customerTiers.id],
@@ -409,12 +409,12 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
   invoices: many(invoices),
 }));
 
-export const productCategoriesRelations = relations(productCategories, ({ many }) => ({
+export const productCategoriesRelations = relations(productCategories, ({ many }: any) => ({
   products: many(products),
   discountRules: many(discountRules),
 }));
 
-export const productsRelations = relations(products, ({ one, many }) => ({
+export const productsRelations = relations(products, ({ one, many }: any) => ({
   category: one(productCategories, {
     fields: [products.categoryId],
     references: [productCategories.id],
@@ -425,7 +425,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   upsellSuggestions: many(upsellRules, { relationName: "sourceProduct" }),
 }));
 
-export const quotesRelations = relations(quotes, ({ one, many }) => ({
+export const quotesRelations = relations(quotes, ({ one, many }: any) => ({
   customer: one(customers, {
     fields: [quotes.customerId],
     references: [customers.id],
@@ -443,7 +443,7 @@ export const quotesRelations = relations(quotes, ({ one, many }) => ({
   alerts: many(dealAlerts),
 }));
 
-export const quoteLinesRelations = relations(quoteLines, ({ one, many }) => ({
+export const quoteLinesRelations = relations(quoteLines, ({ one, many }: any) => ({
   quote: one(quotes, {
     fields: [quoteLines.quoteId],
     references: [quotes.id],
@@ -464,10 +464,10 @@ export const quoteLinesRelations = relations(quoteLines, ({ one, many }) => ({
 // ============================================================================
 
 export const insertUserSchema = createInsertSchema(users, {
-  email: (s) => s.email("Invalid email format"),
-  password: (s) => s.min(8, "Password must be at least 8 characters").optional(),
-  name: (s) => s.min(2, "Name must be at least 2 characters"),
-  role: (s) => s.refine((val) => USER_ROLES.includes(val as UserRole)),
+  email: (s: any) => s.email("Invalid email format"),
+  password: (s: any) => s.min(8, "Password must be at least 8 characters").optional(),
+  name: (s: any) => s.min(2, "Name must be at least 2 characters"),
+  role: (s: any) => s.refine((val: any) => USER_ROLES.includes(val as UserRole)),
 });
 export const selectUserSchema = createSelectSchema(users);
 export const safeUserSchema = selectUserSchema.omit({ password: true, refreshToken: true });
@@ -476,8 +476,8 @@ export type NewUser = z.infer<typeof insertUserSchema>;
 export type SafeUser = z.infer<typeof safeUserSchema>;
 
 export const insertCustomerSchema = createInsertSchema(customers, {
-  email: (s) => s.email("Invalid email format"),
-  name: (s) => s.min(2, "Name is required"),
+  email: (s: any) => s.email("Invalid email format"),
+  name: (s: any) => s.min(2, "Name is required"),
 });
 export const selectCustomerSchema = createSelectSchema(customers);
 export type Customer = z.infer<typeof selectCustomerSchema>;

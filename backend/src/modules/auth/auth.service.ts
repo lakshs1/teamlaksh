@@ -4,7 +4,7 @@ import { users } from "../../db/schema/index.js";
 import { hashPassword, comparePassword } from "../../lib/password.js";
 import { generateTokenPair, verifyRefreshToken } from "../../lib/jwt.js";
 import { ApiError } from "../../lib/api-error.js";
-import type { SafeUser } from "../../db/schema/users.js";
+import type { SafeUser } from "../../db/schema/index.js";
 
 // ═══════════════════════════════════════════════════════════
 // AUTH SERVICE — DealFlow360 Auth Business Logic

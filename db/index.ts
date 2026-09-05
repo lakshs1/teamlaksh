@@ -27,7 +27,7 @@ export async function createUser(data: unknown) {
   // Insert into PostgreSQL via Drizzle ORM
   const [newUser] = await db
     .insert(schema.users)
-    .values(validatedData)
+    .values(validatedData as any)
     .returning();
 
   return newUser;

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { USER_ROLES } from "../../db/schema/users.js";
+import { USER_ROLES } from "../../db/schema/index.js";
 import {
   registerSchema,
   loginSchema,
