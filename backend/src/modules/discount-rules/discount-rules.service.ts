@@ -149,6 +149,47 @@ export async function updateDiscountRule(
 }
 
 /**
+ * Pure calculation helper for discount governance rules.
+ */
+export function calculateDiscountApprovalRoute(params: {
+  tierMax: number;
+  categoryMax: number;
+  ruleMax?: number | null;
+  requestedDiscountPct: number;
+  managerThreshold?: number;
+  financeThreshold?: number;
+}) {
+  const ruleMax = params.ruleMax !== undefined && params.ruleMax !== null ? params.ruleMax : Infinity;
+  const effectiveMaxDiscount = Math.min(params.tierMax, params.categoryMax, ruleMax);
+
+  const managerThreshold = params.managerThreshold ?? 0;
+  const financeThreshold = params.financeThreshold ?? 5;
+
+  const exceedsCeiling = params.requestedDiscountPct > effectiveMaxDiscount;
+  const requiresFinance = params.requestedDiscountPct > financeThreshold;
+  const requiresManager = params.requestedDiscountPct > managerThreshold;
+
+  let approvalRoute: "auto" | "pending_manager" | "pending_finance" = "auto";
+  if (requiresFinance) {
+    approvalRoute = "pending_finance";
+  } else if (requiresManager) {
+    approvalRoute = "pending_manager";
+  }
+
+  return {
+    tierMax: params.tierMax,
+    categoryMax: params.categoryMax,
+    ruleMax: params.ruleMax !== undefined && params.ruleMax !== null ? params.ruleMax : null,
+    effectiveMaxDiscount,
+    requestedDiscountPct: params.requestedDiscountPct,
+    exceedsCeiling,
+    requiresManager,
+    requiresFinance,
+    approvalRoute,
+  };
+}
+
+/**
  * Calculates effective maximum discount allowed and determines required approval level.
  * Formula: min(tier.max, category.max, rule.max)
  */
@@ -190,33 +231,17 @@ export async function evaluateDiscountPolicy(params: {
 
   const tierMax = parseFloat(tier.maxDiscountPct);
   const categoryMax = parseFloat(category.maxDiscountPct);
-  const ruleMax = rule ? parseFloat(rule.maxDiscountPct) : Infinity;
-
-  const effectiveMaxDiscount = Math.min(tierMax, categoryMax, ruleMax);
-
+  const ruleMax = rule ? parseFloat(rule.maxDiscountPct) : null;
   const managerThreshold = rule ? parseFloat(rule.managerThresholdPct) : 0;
   const financeThreshold = rule ? parseFloat(rule.financeThresholdPct) : 5;
 
-  const exceedsCeiling = params.requested_discount_pct > effectiveMaxDiscount;
-  const requiresFinance = params.requested_discount_pct > financeThreshold;
-  const requiresManager = params.requested_discount_pct > managerThreshold;
-
-  let approvalRoute: "auto" | "pending_manager" | "pending_finance" = "auto";
-  if (requiresFinance) {
-    approvalRoute = "pending_finance";
-  } else if (requiresManager) {
-    approvalRoute = "pending_manager";
-  }
-
-  return {
+  return calculateDiscountApprovalRoute({
     tierMax,
     categoryMax,
-    ruleMax: rule ? ruleMax : null,
-    effectiveMaxDiscount,
+    ruleMax,
     requestedDiscountPct: params.requested_discount_pct,
-    exceedsCeiling,
-    requiresManager,
-    requiresFinance,
-    approvalRoute,
-  };
+    managerThreshold,
+    financeThreshold,
+  });
 }
+

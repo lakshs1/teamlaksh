@@ -379,3 +379,12 @@ export async function addPriceListItem(
 
   return item;
 }
+
+export async function deleteProduct(id: number) {
+  const [deleted] = await db
+    .delete(products)
+    .where(eq(products.id, id))
+    .returning();
+  return deleted;
+}
+

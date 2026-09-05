@@ -220,3 +220,12 @@ export async function updateCustomer(
 
   return getCustomerById(id);
 }
+
+export async function deleteCustomer(id: number) {
+  const [deleted] = await db
+    .delete(customers)
+    .where(eq(customers.id, id))
+    .returning();
+  return deleted;
+}
+

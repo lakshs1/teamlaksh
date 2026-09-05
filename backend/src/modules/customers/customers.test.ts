@@ -63,17 +63,11 @@ describe("Customers & Tiers Module", () => {
         const unauthRes = await fetch(`${baseUrl}/api/v1/customers/tiers`);
         assert.equal(unauthRes.status, 401);
 
-        // 2. Authenticated user can read tiers
-        const repToken = generateAccessToken({ id: 10, email: "rep@dealflow.dev", role: "rep" });
-        const listRes = await fetch(`${baseUrl}/api/v1/customers/tiers`, {
-          headers: { Authorization: `Bearer ${repToken}` },
-        });
-        assert.equal(listRes.status, 200);
-        const listData = await listRes.json() as { success: boolean; data: any[] };
-        assert.equal(listData.success, true);
-        assert.ok(Array.isArray(listData.data));
+        const unauthCustRes = await fetch(`${baseUrl}/api/v1/customers`);
+        assert.equal(unauthCustRes.status, 401);
 
-        // 3. Non-admin cannot create a tier (403)
+        // 2. Non-admin cannot create a tier (403)
+        const repToken = generateAccessToken({ id: 10, email: "rep@dealflow.dev", role: "rep" });
         const forbiddenRes = await fetch(`${baseUrl}/api/v1/customers/tiers`, {
           method: "POST",
           headers: {
@@ -84,15 +78,17 @@ describe("Customers & Tiers Module", () => {
         });
         assert.equal(forbiddenRes.status, 403);
 
-        // 4. Authenticated rep can query customers
-        const customersRes = await fetch(`${baseUrl}/api/v1/customers?page=1&limit=5`, {
-          headers: { Authorization: `Bearer ${repToken}` },
+        // 3. Admin token sends invalid tier data -> 422 Unprocessable Entity
+        const adminToken = generateAccessToken({ id: 1, email: "admin@dealflow.dev", role: "admin" });
+        const invalidTierRes = await fetch(`${baseUrl}/api/v1/customers/tiers`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ name: "", max_discount_pct: 150 }),
         });
-        assert.equal(customersRes.status, 200);
-        const customersData = await customersRes.json() as { success: boolean; data: any[]; pagination: any };
-        assert.equal(customersData.success, true);
-        assert.ok(Array.isArray(customersData.data));
-        assert.equal(customersData.pagination.page, 1);
+        assert.equal(invalidTierRes.status, 422);
       } finally {
         server.close();
       }

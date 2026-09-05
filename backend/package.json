@@ -7,6 +7,7 @@
     "dev": "npx tsx watch src/index.ts",
     "start": "npx tsx src/index.ts",
     "build": "npx tsc",
+    "tunnel": "npx tsx src/scripts/tunnel.ts",
     "test": "npx tsx --test src/**/*.test.ts",
     "db:generate": "npm --prefix ../db run db:generate",
     "db:migrate": "npm --prefix ../db run db:migrate",
@@ -32,6 +33,7 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
+    "@ngrok/ngrok": "^1.7.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",

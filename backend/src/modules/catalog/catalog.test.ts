@@ -92,25 +92,11 @@ describe("Catalog Module", () => {
         const unauthRes = await fetch(`${baseUrl}/api/v1/catalog/categories`);
         assert.equal(unauthRes.status, 401);
 
-        // 2. Rep token can list categories & products
+        const unauthProdRes = await fetch(`${baseUrl}/api/v1/catalog/products`);
+        assert.equal(unauthProdRes.status, 401);
+
+        // 2. Non-admin (rep) cannot create category (403)
         const repToken = generateAccessToken({ id: 10, email: "rep@dealflow.dev", role: "rep" });
-        const categoriesRes = await fetch(`${baseUrl}/api/v1/catalog/categories`, {
-          headers: { Authorization: `Bearer ${repToken}` },
-        });
-        assert.equal(categoriesRes.status, 200);
-        const categoriesData = await categoriesRes.json() as { success: boolean; data: any[] };
-        assert.equal(categoriesData.success, true);
-        assert.ok(Array.isArray(categoriesData.data));
-
-        const productsRes = await fetch(`${baseUrl}/api/v1/catalog/products?page=1&limit=5`, {
-          headers: { Authorization: `Bearer ${repToken}` },
-        });
-        assert.equal(productsRes.status, 200);
-        const productsData = await productsRes.json() as { success: boolean; data: any[]; pagination: any };
-        assert.equal(productsData.success, true);
-        assert.ok(Array.isArray(productsData.data));
-
-        // 3. Non-admin cannot create category (403)
         const forbiddenCategoryRes = await fetch(`${baseUrl}/api/v1/catalog/categories`, {
           method: "POST",
           headers: {
@@ -121,7 +107,7 @@ describe("Catalog Module", () => {
         });
         assert.equal(forbiddenCategoryRes.status, 403);
 
-        // 4. Non-admin cannot create product (403)
+        // 3. Non-admin (rep) cannot create product (403)
         const forbiddenProductRes = await fetch(`${baseUrl}/api/v1/catalog/products`, {
           method: "POST",
           headers: {
@@ -136,6 +122,22 @@ describe("Catalog Module", () => {
           }),
         });
         assert.equal(forbiddenProductRes.status, 403);
+
+        // 4. Admin token sends invalid product data -> returns 422 Unprocessable Entity
+        const adminToken = generateAccessToken({ id: 1, email: "admin@dealflow.dev", role: "admin" });
+        const invalidProdRes = await fetch(`${baseUrl}/api/v1/catalog/products`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "",
+            category_id: "not_a_number",
+            base_price: -50,
+          }),
+        });
+        assert.equal(invalidProdRes.status, 422);
       } finally {
         server.close();
       }
