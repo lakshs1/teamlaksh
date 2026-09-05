@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@db": ["../db/index.ts"],
+      "@db/*": ["../db/*"],
+      "drizzle-orm": ["./node_modules/drizzle-orm"],
+      "drizzle-orm/*": ["./node_modules/drizzle-orm/*"],
+      "drizzle-zod": ["./node_modules/drizzle-zod"],
+      "drizzle-zod/*": ["./node_modules/drizzle-zod/*"],
+      "zod": ["./node_modules/zod"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "../db/**/*.ts"],
+  "exclude": ["node_modules", "dist", "../db/node_modules"]
+}
