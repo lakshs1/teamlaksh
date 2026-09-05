@@ -244,7 +244,24 @@ export async function getDealHealth(stalledDays: number = 7) {
     await db.insert(dealAlerts).values(newAlertsToInsert);
   }
 
+  const atRiskQuoteIds = new Set([
+    ...stalledQuotesList.map((sq) => sq.id),
+    ...discountAnomaliesList.map((da) => da.id),
+    ...deliveryRisksList.map((dr) => dr.quote_id),
+  ]);
+
+  const totalDeals = activeQuotes.length;
+  const atRiskDeals = atRiskQuoteIds.size;
+  const healthyDeals = Math.max(0, totalDeals - atRiskDeals);
+  const criticalCount =
+    existingAlerts.filter((a) => a.severity === "critical").length +
+    newAlertsToInsert.filter((a) => a.severity === "critical").length;
+
   return {
+    total: totalDeals,
+    healthy: healthyDeals,
+    atRisk: atRiskDeals,
+    critical: criticalCount,
     stalled_quotes: stalledQuotesList,
     discount_anomalies: discountAnomaliesList,
     delivery_risks: deliveryRisksList,
@@ -296,9 +313,13 @@ export async function listAlerts(filter: AlertsQuery) {
   const quoteRows = await db.select().from(quotes).where(inArray(quotes.id, qIds));
   const quoteMap = new Map(quoteRows.map((q) => [q.id, q]));
 
-  const cIds = Array.from(new Set(quoteRows.map((q) => q.customerId)));
+  const cIds = Array.from(new Set(quoteRows.map((q) => q.customerId).filter(Boolean)));
   const custRows = cIds.length > 0 ? await db.select().from(customers).where(inArray(customers.id, cIds)) : [];
   const custMap = new Map(custRows.map((c) => [c.id, c.name]));
+
+  const repIds = Array.from(new Set(quoteRows.map((q) => q.repId).filter(Boolean)));
+  const repRows = repIds.length > 0 ? await db.select().from(users).where(inArray(users.id, repIds)) : [];
+  const repMap = new Map(repRows.map((u) => [u.id, u.name]));
 
   const items = rows.map((a) => {
     const q = quoteMap.get(a.quoteId);
@@ -307,6 +328,8 @@ export async function listAlerts(filter: AlertsQuery) {
       quote_id: a.quoteId,
       quote_number: q?.quoteNumber,
       customer_name: q ? custMap.get(q.customerId) : undefined,
+      rep_name: q ? repMap.get(q.repId) : undefined,
+      amount: q ? Number(q.grandTotal) : undefined,
       type: a.type,
       severity: a.severity,
       message: a.message,

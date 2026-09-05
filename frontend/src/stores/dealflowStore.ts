@@ -140,6 +140,7 @@ export interface InvoiceItem {
 
 export interface DealHealthItem {
   id: string;
+  quoteId?: number | string;
   quotationRef: string;
   customerName: string;
   repName: string;

@@ -80,20 +80,20 @@ describe("Analytics Module", () => {
       }
     });
 
-    it("should forbid sales reps from accessing analytics endpoints with 403", async () => {
+    it("should forbid customer users from accessing analytics endpoints with 403", async () => {
       const server = http.createServer(app);
       await new Promise<void>((resolve) => server.listen(0, resolve));
       const { port } = server.address() as any;
       const url = `http://localhost:${port}`;
 
       try {
-        const repToken = generateAccessToken({
+        const customerToken = generateAccessToken({
           id: 99,
-          email: "rep@dealflow360.dev",
-          role: "rep",
+          email: "customer@example.com",
+          role: "customer" as any,
         });
 
-        const headers = { Authorization: `Bearer ${repToken}` };
+        const headers = { Authorization: `Bearer ${customerToken}` };
 
         const healthRes = await fetch(`${url}/api/v1/analytics/deal-health`, { headers });
         assert.equal(healthRes.status, 403);

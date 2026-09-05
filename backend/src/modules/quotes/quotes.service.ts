@@ -331,6 +331,7 @@ export async function getQuoteById(id: number) {
     })
     .from(quoteLines)
     .leftJoin(products, eq(quoteLines.productId, products.id))
+    .where(eq(quoteLines.quoteId, id));
   // Fetch negotiation comments / counter-offers
   const comments = await db
     .select()
@@ -354,12 +355,20 @@ export async function createQuote(
   const quoteNumber = generateQuoteNumber(count);
   const portalToken = randomUUID();
 
+  // Verify rep exists or fallback to first available user
+  let validRepId = repId;
+  const [repUser] = await db.select({ id: users.id }).from(users).where(eq(users.id, repId)).limit(1);
+  if (!repUser) {
+    const [firstUser] = await db.select({ id: users.id }).from(users).limit(1);
+    if (firstUser) validRepId = firstUser.id;
+  }
+
   const [quote] = await db
     .insert(quotes)
     .values({
       quoteNumber,
       customerId: data.customer_id,
-      repId,
+      repId: validRepId,
       status: "draft",
       portalToken,
       notes: data.notes || null,

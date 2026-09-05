@@ -158,10 +158,10 @@ export function mapFulfillment(data: any): FulfillmentItem {
     reference: ref,
     quotationReference: data.quote?.quoteNumber || data.quoteNumber || data.quotationReference || '',
     customerName,
-    scheduledDate: dateStr(data.scheduledDate || data.createdAt),
+    scheduledDate: dateStr(data.scheduledDate || data.createdAt || data.date),
     status: data.status || 'Ready',
-    responsible: data.performedBy || data.responsible || 'Operations',
-    lines: (data.lines || []).map((l: any) => ({
+    responsible: data.performedBy || data.responsible || data.rep?.name || 'Operations',
+    lines: (data.lines || data.quote?.lines || []).map((l: any) => ({
       id: l.id,
       productId: l.productId,
       productName: l.product?.name || l.productName || '',
@@ -249,17 +249,38 @@ const SEVERITY_MAP: Record<string, DealHealthItem['severity']> = {
 };
 
 export function mapDealAlert(alert: any): DealHealthItem {
+  const quoteRef =
+    alert.quote_number ||
+    alert.quoteNumber ||
+    alert.quote?.quoteNumber ||
+    (alert.quote_id || alert.quoteId || alert.quote?.id ? `QT-${alert.quote_id || alert.quoteId || alert.quote?.id}` : 'Quote');
+
+  const custName =
+    alert.customer_name ||
+    alert.customerName ||
+    alert.customer?.name ||
+    alert.quote?.customer?.name ||
+    'Unknown';
+
+  const rep =
+    alert.rep_name ||
+    alert.repName ||
+    alert.rep?.name ||
+    alert.quote?.rep?.name ||
+    'Sales Rep';
+
   return {
     id: str(alert.id),
-    quotationRef: alert.quote?.quoteNumber || `QT-${alert.quoteId}`,
-    customerName: alert.quote?.customer?.name || alert.customerName || 'Unknown',
-    repName: alert.quote?.rep?.name || alert.repName || 'Rep',
-    amount: num(alert.quote?.grandTotal || alert.amount),
-    daysInactive: num(alert.daysInactive || 0),
+    quoteId: alert.quote_id || alert.quoteId || alert.quote?.id,
+    quotationRef: quoteRef,
+    customerName: custName,
+    repName: rep,
+    amount: num(alert.quote?.grandTotal || alert.amount || alert.grand_total || 0),
+    daysInactive: num(alert.days_inactive || alert.daysInactive || 0),
     riskCategory: RISK_MAP[alert.type] || 'Stalled Deal',
     severity: SEVERITY_MAP[alert.severity] || 'Medium',
     description: alert.message || alert.description || '',
-    triggeredAction: alert.isResolved ? 'Resolved' : undefined,
+    triggeredAction: (alert.is_resolved || alert.isResolved) ? 'Resolved' : undefined,
   };
 }
 
