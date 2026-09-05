@@ -175,3 +175,83 @@ export async function getMe(userId: number | string) {
 
   return toSafeUser(user);
 }
+
+/**
+ * Switch role for the authenticated user (demo role switcher).
+ */
+export async function switchRole(userId: number | string, newRole: string) {
+  if (!USER_ROLES.includes(newRole as any)) {
+    throw ApiError.badRequest(`Invalid role. Must be one of: ${USER_ROLES.join(", ")}`);
+  }
+
+  const [user] = await db
+    .update(users)
+    .set({ role: newRole, updatedAt: new Date() })
+    .where(eq(users.id, Number(userId)))
+    .returning();
+
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+
+  const tokenPayload = { id: user.id, email: user.email, role: user.role };
+  const tokens = generateTokenPair(tokenPayload);
+
+  await db
+    .update(users)
+    .set({ refreshToken: tokens.refreshToken })
+    .where(eq(users.id, user.id));
+
+  return {
+    user: toSafeUser(user),
+    ...tokens,
+  };
+}
+
+/**
+ * Instant demo login for a given role (no password required in demo mode).
+ */
+export async function demoLogin(role: string) {
+  if (!USER_ROLES.includes(role as any)) {
+    throw ApiError.badRequest(`Invalid role. Must be one of: ${USER_ROLES.join(", ")}`);
+  }
+
+  const demoEmail = `demo.${role}@dealflow360.dev`;
+  let [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, demoEmail))
+    .limit(1);
+
+  if (!user) {
+    const hashedPassword = await hashPassword("demo12345");
+    [user] = await db
+      .insert(users)
+      .values({
+        email: demoEmail,
+        password: hashedPassword,
+        name: `Demo ${role.charAt(0).toUpperCase() + role.slice(1)}`,
+        role,
+      })
+      .returning();
+  } else if (user.role !== role) {
+    [user] = await db
+      .update(users)
+      .set({ role })
+      .where(eq(users.id, user.id))
+      .returning();
+  }
+
+  const tokenPayload = { id: user.id, email: user.email, role: user.role };
+  const tokens = generateTokenPair(tokenPayload);
+
+  await db
+    .update(users)
+    .set({ refreshToken: tokens.refreshToken })
+    .where(eq(users.id, user.id));
+
+  return {
+    user: toSafeUser(user),
+    ...tokens,
+  };
+}

@@ -17,7 +17,7 @@ import { z } from "zod";
 // 1. USERS & ROLES
 // ============================================================================
 
-export const USER_ROLES = ["admin", "manager", "rep", "finance"] as const;
+export const USER_ROLES = ["admin", "manager", "rep", "finance", "operations"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const users = pgTable("users", {

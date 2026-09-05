@@ -10,7 +10,7 @@ import {
 
 describe("Auth Schemas & User Roles Validation", () => {
   it("should define the required DealFlow360 roles", () => {
-    assert.deepEqual([...USER_ROLES], ["admin", "manager", "rep", "finance"]);
+    assert.deepEqual([...USER_ROLES], ["admin", "manager", "rep", "finance", "operations"]);
   });
 
   it("should accept valid register request with supported roles", () => {

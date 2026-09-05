@@ -87,3 +87,37 @@ export async function getMe(
     next(error);
   }
 }
+
+export async function switchRole(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await authService.switchRole(req.user!.id, req.body.role);
+    res.status(200).json({
+      success: true,
+      message: `Role switched to ${req.body.role} successfully`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function demoLogin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await authService.demoLogin(req.body.role);
+    res.status(200).json({
+      success: true,
+      message: `Demo logged in as ${req.body.role}`,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}

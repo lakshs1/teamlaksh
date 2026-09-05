@@ -65,6 +65,13 @@ describe("Auth API & Role Protected Endpoints", () => {
         headers: { Authorization: `Bearer ${adminToken}` },
       });
       assert.equal(adminRes.status, 200);
+
+      // 7. Operations role verification
+      const opsToken = generateAccessToken({ id: 14, email: "ops@dealflow.dev", role: "operations" });
+      const opsDeniedRes = await fetch(`${baseUrl}/api/test-roles/manager-only`, {
+        headers: { Authorization: `Bearer ${opsToken}` },
+      });
+      assert.equal(opsDeniedRes.status, 403);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
