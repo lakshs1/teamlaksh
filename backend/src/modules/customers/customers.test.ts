@@ -1,0 +1,101 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { app } from "../../app.js";
+import { generateAccessToken } from "../../lib/jwt.js";
+import {
+  createTierSchema,
+  createCustomerSchema,
+  updateCustomerSchema,
+} from "./customers.schemas.js";
+
+describe("Customers & Tiers Module", () => {
+  describe("Schema Validations", () => {
+    it("should validate createTierSchema correctly", () => {
+      const valid = createTierSchema.parse({
+        name: "Diamond",
+        max_discount_pct: 25.5,
+      });
+      assert.equal(valid.name, "Diamond");
+      assert.equal(valid.max_discount_pct, 25.5);
+
+      assert.throws(() => {
+        createTierSchema.parse({ name: "A", max_discount_pct: -5 });
+      });
+
+      assert.throws(() => {
+        createTierSchema.parse({ name: "Diamond", max_discount_pct: 120 });
+      });
+    });
+
+    it("should validate createCustomerSchema correctly", () => {
+      const valid = createCustomerSchema.parse({
+        name: "Acme Corp",
+        email: "contact@acme.com",
+        tier_id: 1,
+      });
+      assert.equal(valid.name, "Acme Corp");
+      assert.equal(valid.email, "contact@acme.com");
+
+      assert.throws(() => {
+        createCustomerSchema.parse({ name: "", email: "invalid-email" });
+      });
+    });
+
+    it("should validate updateCustomerSchema correctly", () => {
+      const valid = updateCustomerSchema.parse({
+        name: "Acme International",
+      });
+      assert.equal(valid.name, "Acme International");
+    });
+  });
+
+  describe("API Endpoints & Access Control", () => {
+    it("should enforce authentication and admin authorization on tiers", async () => {
+      const server = http.createServer(app);
+      await new Promise<void>((resolve) => server.listen(0, resolve));
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      const baseUrl = `http://127.0.0.1:${port}`;
+
+      try {
+        // 1. Unauthenticated request to /tiers should be 401
+        const unauthRes = await fetch(`${baseUrl}/api/v1/customers/tiers`);
+        assert.equal(unauthRes.status, 401);
+
+        // 2. Authenticated user can read tiers
+        const repToken = generateAccessToken({ id: 10, email: "rep@dealflow.dev", role: "rep" });
+        const listRes = await fetch(`${baseUrl}/api/v1/customers/tiers`, {
+          headers: { Authorization: `Bearer ${repToken}` },
+        });
+        assert.equal(listRes.status, 200);
+        const listData = await listRes.json() as { success: boolean; data: any[] };
+        assert.equal(listData.success, true);
+        assert.ok(Array.isArray(listData.data));
+
+        // 3. Non-admin cannot create a tier (403)
+        const forbiddenRes = await fetch(`${baseUrl}/api/v1/customers/tiers`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${repToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ name: "Platinum VIP", max_discount_pct: 30 }),
+        });
+        assert.equal(forbiddenRes.status, 403);
+
+        // 4. Authenticated rep can query customers
+        const customersRes = await fetch(`${baseUrl}/api/v1/customers?page=1&limit=5`, {
+          headers: { Authorization: `Bearer ${repToken}` },
+        });
+        assert.equal(customersRes.status, 200);
+        const customersData = await customersRes.json() as { success: boolean; data: any[]; pagination: any };
+        assert.equal(customersData.success, true);
+        assert.ok(Array.isArray(customersData.data));
+        assert.equal(customersData.pagination.page, 1);
+      } finally {
+        server.close();
+      }
+    });
+  });
+});

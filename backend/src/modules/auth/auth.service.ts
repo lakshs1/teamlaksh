@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { db, users, type SafeUser } from "@db";
+import { db, users, USER_ROLES, type SafeUser } from "@db";
 import { hashPassword, comparePassword } from "../../lib/password.js";
 import { generateTokenPair, verifyRefreshToken } from "../../lib/jwt.js";
 import { ApiError } from "../../lib/api-error.js";

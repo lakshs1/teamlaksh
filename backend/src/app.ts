@@ -8,6 +8,9 @@ import { errorHandler } from "./middleware/error.middleware.js";
 
 // ── Import route modules ──────────────────────────────────
 import authRoutes from "./modules/auth/auth.routes.js";
+import customersRoutes from "./modules/customers/customers.routes.js";
+import catalogRoutes from "./modules/catalog/catalog.routes.js";
+import discountRulesRoutes from "./modules/discount-rules/discount-rules.routes.js";
 
 // ── Logger ────────────────────────────────────────────────
 const logger = pino({
@@ -39,6 +42,9 @@ app.get("/api/health", (_req, res) => {
 // ═══════════════════════════════════════════════════════════
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/auth", authRoutes); // backward compatibility alias
+app.use("/api/v1/customers", customersRoutes);
+app.use("/api/v1/catalog", catalogRoutes);
+app.use("/api/v1/discount-rules", discountRulesRoutes);
 
 // ── Error handler (must be last) ──────────────────────────
 app.use(errorHandler);
