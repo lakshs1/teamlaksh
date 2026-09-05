@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Drizzle
+drizzle/meta/
+
+# Pino pretty logs
+pino-pretty.log
