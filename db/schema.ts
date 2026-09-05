@@ -309,6 +309,7 @@ export const warehouseStock = pgTable(
     variantId: integer("variant_id").references(() => productVariants.id, {
       onDelete: "cascade",
     }),
+    quantity: integer("quantity").notNull().default(0),
     quantityOnHand: integer("quantity_on_hand").notNull().default(0), // Physical stock
     quantityReserved: integer("quantity_reserved").notNull().default(0), // Allocated to active orders
     reorderLevel: integer("reorder_level").notNull().default(10), // Alert threshold
@@ -336,6 +337,7 @@ export const fulfillmentSplits = pgTable("fulfillment_splits", {
   warehouseId: integer("warehouse_id")
     .notNull()
     .references(() => warehouses.id),
+  quantity: integer("quantity").notNull(),
   quantityAllocated: integer("quantity_allocated").notNull(),
   quantityFulfilled: integer("quantity_fulfilled").notNull().default(0),
   isBackordered: boolean("is_backordered").notNull().default(false),

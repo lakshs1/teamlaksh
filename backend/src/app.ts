@@ -13,6 +13,8 @@ import catalogRoutes from "./modules/catalog/catalog.routes.js";
 import discountRulesRoutes from "./modules/discount-rules/discount-rules.routes.js";
 import quotesRoutes from "./modules/quotes/quotes.routes.js";
 import approvalsRoutes from "./modules/approvals/approvals.routes.js";
+import recommendationsRoutes from "./modules/recommendations/recommendations.routes.js";
+import fulfillmentRoutes from "./modules/fulfillment/fulfillment.routes.js";
 
 // ── Logger ────────────────────────────────────────────────
 const logger = pino({
@@ -54,6 +56,8 @@ app.use("/api/v1/catalog", catalogRoutes);
 app.use("/api/v1/discount-rules", discountRulesRoutes);
 app.use("/api/v1/quotes", quotesRoutes);
 app.use("/api/v1/approvals", approvalsRoutes);
+app.use("/api/v1/recommendations", recommendationsRoutes);
+app.use("/api/v1/fulfillment", fulfillmentRoutes);
 
 // ── Error handler (must be last) ──────────────────────────
 app.use(errorHandler);
