@@ -8,6 +8,7 @@ import {
   integer,
   numeric,
   unique,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -25,13 +26,35 @@ export const users = pgTable("users", {
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   password: text("password"),
-  role: varchar("role", { length: 50 }).notNull().default("rep"), // admin | manager | rep | finance
+  role: varchar("role", { length: 50 }).notNull().default("rep"), // admin | manager | rep | finance | operations
   avatarUrl: text("avatar_url"),
   githubUrl: text("github_url"),
   refreshToken: text("refresh_token"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const teams = pgTable("teams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  code: text("code"),
+  leaderId: integer("leader_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const projects = pgTable("projects", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  tagline: text("tagline"),
+  description: text("description"),
+  techStack: jsonb("tech_stack"),
+  repoUrl: text("repo_url"),
+  demoUrl: text("demo_url"),
+  teamId: integer("team_id").references(() => teams.id),
+  status: text("status").default("active"),
+  upvotes: integer("upvotes").default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ============================================================================
@@ -253,11 +276,12 @@ export const upsellRules = pgTable("upsell_rules", {
 });
 
 // ============================================================================
-// 8. WAREHOUSES, INVENTORY & FULFILLMENT SPLITS
+// 8. WAREHOUSES & OPERATIONS INVENTORY MANAGEMENT
 // ============================================================================
 
 export const warehouses = pgTable("warehouses", {
   id: serial("id").primaryKey(),
+  code: varchar("code", { length: 50 }).unique(), // WH-EAST, WH-WEST
   name: varchar("name", { length: 255 }).notNull().unique(), // Main Warehouse, East Depot
   location: text("location"),
   shippingCostWeight: numeric("shipping_cost_weight", { precision: 5, scale: 2 })
@@ -265,8 +289,13 @@ export const warehouses = pgTable("warehouses", {
     .default("1.0"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+/**
+ * Multi-warehouse inventory tracking with on-hand, reserved, and reorder triggers.
+ * Managed by Operations role.
+ */
 export const warehouseStock = pgTable(
   "warehouse_stock",
   {
@@ -277,16 +306,25 @@ export const warehouseStock = pgTable(
     productId: integer("product_id")
       .notNull()
       .references(() => products.id, { onDelete: "cascade" }),
-    quantity: integer("quantity").notNull().default(0),
-    reorderLevel: integer("reorder_level").notNull().default(10),
+    variantId: integer("variant_id").references(() => productVariants.id, {
+      onDelete: "cascade",
+    }),
+    quantityOnHand: integer("quantity_on_hand").notNull().default(0), // Physical stock
+    quantityReserved: integer("quantity_reserved").notNull().default(0), // Allocated to active orders
+    reorderLevel: integer("reorder_level").notNull().default(10), // Alert threshold
+    reorderQuantity: integer("reorder_quantity").notNull().default(50),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t: any) => ({
-    warehouseProductUnique: unique().on(t.warehouseId, t.productId),
+  (t) => ({
+    warehouseProductVariantUnique: unique().on(t.warehouseId, t.productId, t.variantId),
   })
 );
 
+/**
+ * Fulfillment Splits across multiple warehouses for single or multi-line orders.
+ * Operations role can view, allocate, split, and override assignments.
+ */
 export const fulfillmentSplits = pgTable("fulfillment_splits", {
   id: serial("id").primaryKey(),
   quoteId: integer("quote_id")
@@ -298,9 +336,59 @@ export const fulfillmentSplits = pgTable("fulfillment_splits", {
   warehouseId: integer("warehouse_id")
     .notNull()
     .references(() => warehouses.id),
-  quantity: integer("quantity").notNull(),
+  quantityAllocated: integer("quantity_allocated").notNull(),
+  quantityFulfilled: integer("quantity_fulfilled").notNull().default(0),
   isBackordered: boolean("is_backordered").notNull().default(false),
-  status: varchar("status", { length: 50 }).notNull().default("pending"), // pending | shipped | delivered
+  status: varchar("status", { length: 50 }).notNull().default("allocated"), // allocated | partially_fulfilled | fulfilled | shipped | delivered | cancelled
+  allocatedBy: integer("allocated_by").references(() => users.id), // Operations user who reviewed/managed allocation
+  trackingNumber: varchar("tracking_number", { length: 100 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * Backorders for items with insufficient warehouse stock.
+ * Managed by Operations users for restocking and delayed fulfillment.
+ */
+export const backorders = pgTable("backorders", {
+  id: serial("id").primaryKey(),
+  quoteId: integer("quote_id")
+    .notNull()
+    .references(() => quotes.id, { onDelete: "cascade" }),
+  quoteLineId: integer("quote_line_id")
+    .notNull()
+    .references(() => quoteLines.id, { onDelete: "cascade" }),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id),
+  quantityBackordered: integer("quantity_backordered").notNull(),
+  quantityRemaining: integer("quantity_remaining").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("open"), // open | partially_resolved | resolved | cancelled
+  expectedDate: timestamp("expected_date"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * Inventory movements log for audit and stock history.
+ * Tracks stock additions, reservations, releases, adjustments, and fulfillments by Operations.
+ */
+export const stockMovements = pgTable("stock_movements", {
+  id: serial("id").primaryKey(),
+  warehouseId: integer("warehouse_id")
+    .notNull()
+    .references(() => warehouses.id, { onDelete: "cascade" }),
+  productId: integer("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  variantId: integer("variant_id").references(() => productVariants.id),
+  quantityChange: integer("quantity_change").notNull(), // + positive for restock, - negative for dispatch
+  movementType: varchar("movement_type", { length: 50 }).notNull(), // restock | allocation | fulfillment | adjustment | transfer
+  referenceId: varchar("reference_id", { length: 100 }), // Quote/Order/PO number
+  performedBy: integer("performed_by").references(() => users.id), // Operations user
+  notes: text("notes"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -388,18 +476,36 @@ export const dealAlerts = pgTable("deal_alerts", {
 // 12. DRIZZLE RELATIONS
 // ============================================================================
 
-export const usersRelations = relations(users, ({ many }: any) => ({
+export const usersRelations = relations(users, ({ many }) => ({
   quotes: many(quotes),
   approvalLogs: many(approvalLogs),
+  managedFulfillments: many(fulfillmentSplits),
+  stockMovements: many(stockMovements),
+  ledTeams: many(teams),
 }));
 
-export const customerTiersRelations = relations(customerTiers, ({ many }: any) => ({
+export const teamsRelations = relations(teams, ({ one, many }) => ({
+  leader: one(users, {
+    fields: [teams.leaderId],
+    references: [users.id],
+  }),
+  projects: many(projects),
+}));
+
+export const projectsRelations = relations(projects, ({ one }) => ({
+  team: one(teams, {
+    fields: [projects.teamId],
+    references: [teams.id],
+  }),
+}));
+
+export const customerTiersRelations = relations(customerTiers, ({ many }) => ({
   customers: many(customers),
   priceLists: many(priceLists),
   discountRules: many(discountRules),
 }));
 
-export const customersRelations = relations(customers, ({ one, many }: any) => ({
+export const customersRelations = relations(customers, ({ one, many }) => ({
   tier: one(customerTiers, {
     fields: [customers.tierId],
     references: [customerTiers.id],
@@ -409,12 +515,12 @@ export const customersRelations = relations(customers, ({ one, many }: any) => (
   invoices: many(invoices),
 }));
 
-export const productCategoriesRelations = relations(productCategories, ({ many }: any) => ({
+export const productCategoriesRelations = relations(productCategories, ({ many }) => ({
   products: many(products),
   discountRules: many(discountRules),
 }));
 
-export const productsRelations = relations(products, ({ one, many }: any) => ({
+export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(productCategories, {
     fields: [products.categoryId],
     references: [productCategories.id],
@@ -423,9 +529,11 @@ export const productsRelations = relations(products, ({ one, many }: any) => ({
   priceListItems: many(priceListItems),
   warehouseStock: many(warehouseStock),
   upsellSuggestions: many(upsellRules, { relationName: "sourceProduct" }),
+  backorders: many(backorders),
+  stockMovements: many(stockMovements),
 }));
 
-export const quotesRelations = relations(quotes, ({ one, many }: any) => ({
+export const quotesRelations = relations(quotes, ({ one, many }) => ({
   customer: one(customers, {
     fields: [quotes.customerId],
     references: [customers.id],
@@ -438,12 +546,13 @@ export const quotesRelations = relations(quotes, ({ one, many }: any) => ({
   approvalLogs: many(approvalLogs),
   portalComments: many(portalComments),
   fulfillmentSplits: many(fulfillmentSplits),
+  backorders: many(backorders),
   subscriptions: many(subscriptions),
   invoices: many(invoices),
   alerts: many(dealAlerts),
 }));
 
-export const quoteLinesRelations = relations(quoteLines, ({ one, many }: any) => ({
+export const quoteLinesRelations = relations(quoteLines, ({ one, many }) => ({
   quote: one(quotes, {
     fields: [quoteLines.quoteId],
     references: [quotes.id],
@@ -457,6 +566,77 @@ export const quoteLinesRelations = relations(quoteLines, ({ one, many }: any) =>
     references: [productVariants.id],
   }),
   fulfillmentSplits: many(fulfillmentSplits),
+  backorders: many(backorders),
+}));
+
+export const warehousesRelations = relations(warehouses, ({ many }) => ({
+  stock: many(warehouseStock),
+  fulfillmentSplits: many(fulfillmentSplits),
+  stockMovements: many(stockMovements),
+}));
+
+export const warehouseStockRelations = relations(warehouseStock, ({ one }) => ({
+  warehouse: one(warehouses, {
+    fields: [warehouseStock.warehouseId],
+    references: [warehouses.id],
+  }),
+  product: one(products, {
+    fields: [warehouseStock.productId],
+    references: [products.id],
+  }),
+  variant: one(productVariants, {
+    fields: [warehouseStock.variantId],
+    references: [productVariants.id],
+  }),
+}));
+
+export const fulfillmentSplitsRelations = relations(fulfillmentSplits, ({ one }) => ({
+  quote: one(quotes, {
+    fields: [fulfillmentSplits.quoteId],
+    references: [quotes.id],
+  }),
+  quoteLine: one(quoteLines, {
+    fields: [fulfillmentSplits.quoteLineId],
+    references: [quoteLines.id],
+  }),
+  warehouse: one(warehouses, {
+    fields: [fulfillmentSplits.warehouseId],
+    references: [warehouses.id],
+  }),
+  operator: one(users, {
+    fields: [fulfillmentSplits.allocatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const backordersRelations = relations(backorders, ({ one }) => ({
+  quote: one(quotes, {
+    fields: [backorders.quoteId],
+    references: [quotes.id],
+  }),
+  quoteLine: one(quoteLines, {
+    fields: [backorders.quoteLineId],
+    references: [quoteLines.id],
+  }),
+  product: one(products, {
+    fields: [backorders.productId],
+    references: [products.id],
+  }),
+}));
+
+export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
+  warehouse: one(warehouses, {
+    fields: [stockMovements.warehouseId],
+    references: [warehouses.id],
+  }),
+  product: one(products, {
+    fields: [stockMovements.productId],
+    references: [products.id],
+  }),
+  operator: one(users, {
+    fields: [stockMovements.performedBy],
+    references: [users.id],
+  }),
 }));
 
 // ============================================================================
@@ -464,10 +644,10 @@ export const quoteLinesRelations = relations(quoteLines, ({ one, many }: any) =>
 // ============================================================================
 
 export const insertUserSchema = createInsertSchema(users, {
-  email: (s: any) => s.email("Invalid email format"),
-  password: (s: any) => s.min(8, "Password must be at least 8 characters").optional(),
-  name: (s: any) => s.min(2, "Name must be at least 2 characters"),
-  role: (s: any) => s.refine((val: any) => USER_ROLES.includes(val as UserRole)),
+  email: (s) => s.email("Invalid email format"),
+  password: (s) => s.min(8, "Password must be at least 8 characters").optional(),
+  name: (s) => s.min(2, "Name must be at least 2 characters"),
+  role: (s) => s.refine((val) => USER_ROLES.includes(val as UserRole)),
 });
 export const selectUserSchema = createSelectSchema(users);
 export const safeUserSchema = selectUserSchema.omit({ password: true, refreshToken: true });
@@ -476,8 +656,8 @@ export type NewUser = z.infer<typeof insertUserSchema>;
 export type SafeUser = z.infer<typeof safeUserSchema>;
 
 export const insertCustomerSchema = createInsertSchema(customers, {
-  email: (s: any) => s.email("Invalid email format"),
-  name: (s: any) => s.min(2, "Name is required"),
+  email: (s) => s.email("Invalid email format"),
+  name: (s) => s.min(2, "Name is required"),
 });
 export const selectCustomerSchema = createSelectSchema(customers);
 export type Customer = z.infer<typeof selectCustomerSchema>;
@@ -504,3 +684,29 @@ export type Invoice = z.infer<typeof selectInvoiceSchema>;
 export const insertWarehouseSchema = createInsertSchema(warehouses);
 export const selectWarehouseSchema = createSelectSchema(warehouses);
 export type Warehouse = z.infer<typeof selectWarehouseSchema>;
+
+export const insertWarehouseStockSchema = createInsertSchema(warehouseStock);
+export const selectWarehouseStockSchema = createSelectSchema(warehouseStock);
+export type WarehouseStock = z.infer<typeof selectWarehouseStockSchema>;
+
+export const insertFulfillmentSplitSchema = createInsertSchema(fulfillmentSplits);
+export const selectFulfillmentSplitSchema = createSelectSchema(fulfillmentSplits);
+export type FulfillmentSplit = z.infer<typeof selectFulfillmentSplitSchema>;
+
+export const insertBackorderSchema = createInsertSchema(backorders);
+export const selectBackorderSchema = createSelectSchema(backorders);
+export type Backorder = z.infer<typeof selectBackorderSchema>;
+
+export const insertStockMovementSchema = createInsertSchema(stockMovements);
+export const selectStockMovementSchema = createSelectSchema(stockMovements);
+export type StockMovement = z.infer<typeof selectStockMovementSchema>;
+
+export const insertTeamSchema = createInsertSchema(teams);
+export const selectTeamSchema = createSelectSchema(teams);
+export type Team = z.infer<typeof selectTeamSchema>;
+export type NewTeam = z.infer<typeof insertTeamSchema>;
+
+export const insertProjectSchema = createInsertSchema(projects);
+export const selectProjectSchema = createSelectSchema(projects);
+export type Project = z.infer<typeof selectProjectSchema>;
+export type NewProject = z.infer<typeof insertProjectSchema>;
