@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
 
-let rawUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:5001/api/v1';
+let rawUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:5000/api/v1';
 
 rawUrl = rawUrl.trim().replace(/\/+$/, '');
 if (!rawUrl.endsWith('/api/v1')) {

@@ -31,12 +31,25 @@ const logger = pino({
 const app = express();
 
 // ── Global middleware ─────────────────────────────────────
-app.use(
-  cors({
-    origin: env.CORS_ORIGIN === "*" ? true : env.CORS_ORIGIN || true,
-    credentials: true,
-  })
-);
+const corsOptions: cors.CorsOptions = {
+  origin: true, // Allow all origins by reflecting request origin (works with credentials)
+  credentials: true,
+  methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "Access-Control-Request-Method",
+    "Access-Control-Request-Headers",
+  ],
+  exposedHeaders: ["Set-Cookie", "Authorization"],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(pinoHttp({ logger }));
