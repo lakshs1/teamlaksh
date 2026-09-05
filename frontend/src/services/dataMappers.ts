@@ -140,12 +140,25 @@ export function mapFulfillment(data: any): FulfillmentItem {
     quantity: num(b.quantity_backordered || b.quantityRemaining || b.quantity),
   }));
 
+  const customerName =
+    data.customer?.name ||
+    data.quote?.customer?.name ||
+    data.customerName ||
+    data.customer_name ||
+    'Unknown';
+
+  const ref =
+    data.reference ||
+    (data.quoteNumber ? data.quoteNumber.replace('QT-', 'SO/') : '') ||
+    (data.quote?.quoteNumber ? data.quote.quoteNumber.replace('QT-', 'SO/') : '') ||
+    `SO/${str(data.quoteId || data.id).padStart(5, '0')}`;
+
   return {
     id: str(data.quoteId || data.id),
-    reference: `SO/${str(data.quoteId || data.id).padStart(5, '0')}`,
-    quotationReference: data.quote?.quoteNumber || data.quotationReference || '',
-    customerName: data.quote?.customer?.name || data.customerName || 'Unknown',
-    scheduledDate: dateStr(data.createdAt),
+    reference: ref,
+    quotationReference: data.quote?.quoteNumber || data.quoteNumber || data.quotationReference || '',
+    customerName,
+    scheduledDate: dateStr(data.scheduledDate || data.createdAt),
     status: data.status || 'Ready',
     responsible: data.performedBy || data.responsible || 'Operations',
     lines: (data.lines || []).map((l: any) => ({
@@ -163,6 +176,7 @@ export function mapFulfillment(data: any): FulfillmentItem {
     backorderedItems: backorderedList,
   };
 }
+
 
 // ─── Subscription ───────────────────────────────────────────────
 const INTERVAL_MAP: Record<string, SubscriptionItem['billingFrequency']> = {
