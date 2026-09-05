@@ -46,9 +46,10 @@ router.get(
 router.post(
   "/quotes/:quoteId/backorders/consolidate",
   authenticate,
-  authorize("rep", "finance", "operations", "admin"),
+  authorize("rep", "finance", "operations", "finance_operations", "admin"),
   consolidateBackordersHandler
 );
+
 router.post(
   "/quotes/:quoteId/backorders/simulate-restock",
   authenticate,

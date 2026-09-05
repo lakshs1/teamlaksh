@@ -51,8 +51,31 @@ export default function OdooNavbar() {
     navigate('/');
   };
 
+  const handleRoleChange = async (selectedRoleStr: UserRole) => {
+    setRole(selectedRoleStr);
+    const roleMap: Record<string, string> = {
+      'Sales Rep': 'rep',
+      'Sales Manager': 'manager',
+      'Finance & Operations': 'finance_operations',
+      'Finance': 'finance_operations',
+      'Operations': 'finance_operations',
+      'Admin': 'admin',
+    };
+    const backendRole = roleMap[selectedRoleStr] || 'rep';
+    try {
+      const { authApi } = await import('../../services/apiServices');
+      const res = await authApi.demoLogin(backendRole);
+      if (res?.data?.user && res?.data?.accessToken) {
+        useAuthStore.getState().setAuth(res.data.user, res.data.accessToken);
+      }
+      toast.success(`Role switched to ${selectedRoleStr}`);
+    } catch {
+      // fallback
+    }
+  };
+
   // Get active display name and avatar initial
-  const displayName = user?.name || 'Admin User';
+  const displayName = user?.name || (currentRole === 'Finance & Operations' ? 'Finance & Operations User' : currentRole === 'Sales Manager' ? 'Sales Manager' : 'Ayush (Sales Rep)');
   const displayEmail = user?.email || 'admin@dealflow.com';
   const initial = displayName.charAt(0).toUpperCase();
 
@@ -64,7 +87,7 @@ export default function OdooNavbar() {
             <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#714B67', letterSpacing: '-0.5px' }}>odoo</span>
             <span style={{ fontWeight: 600, color: '#334155', fontSize: '1rem' }}>DealFlow360</span>
           </Link>
-          <span className="odoo-brand-badge">Rep Workspace</span>
+          <span className="odoo-brand-badge">{currentRole} Workspace</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -111,7 +134,7 @@ export default function OdooNavbar() {
                   onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(113, 75, 103, 0.08)')}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
-                  Reload Data
+                  ↻ Refresh View Data
                 </button>
                 <button
                   onClick={handleGoToBackend}
@@ -120,8 +143,7 @@ export default function OdooNavbar() {
                     textAlign: 'left',
                     padding: '0.5rem 1rem',
                     fontSize: '0.8125rem',
-                    color: '#714B67',
-                    fontWeight: 600,
+                    color: '#334155',
                     background: 'none',
                     border: 'none',
                   }}
@@ -156,7 +178,7 @@ export default function OdooNavbar() {
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B' }}>Role:</span>
             <select
               value={currentRole}
-              onChange={(e) => setRole(e.target.value as UserRole)}
+              onChange={(e) => handleRoleChange(e.target.value as UserRole)}
               style={{
                 background: 'transparent',
                 border: 'none',
