@@ -9,6 +9,9 @@ import {
   createWarehouseHandler,
   getWarehouseStockHandler,
   updateWarehouseStockHandler,
+  checkBackordersRestockHandler,
+  consolidateBackordersHandler,
+  simulateInboundRestockHandler,
 } from "./fulfillment.controller.js";
 import {
   createWarehouseSchema,
@@ -32,6 +35,24 @@ router.post(
   authorize("rep", "finance", "operations", "admin"),
   validate({ body: manualSplitOverrideSchema }),
   overrideWarehouseSplitHandler
+);
+
+// ── Backorder Consolidation Mid-Fulfillment (PRD B6) ──────
+router.get(
+  "/quotes/:quoteId/backorders/check-restock",
+  authenticate,
+  checkBackordersRestockHandler
+);
+router.post(
+  "/quotes/:quoteId/backorders/consolidate",
+  authenticate,
+  authorize("rep", "finance", "operations", "admin"),
+  consolidateBackordersHandler
+);
+router.post(
+  "/quotes/:quoteId/backorders/simulate-restock",
+  authenticate,
+  simulateInboundRestockHandler
 );
 
 // ── Warehouses Management ─────────────────────────────────

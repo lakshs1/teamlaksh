@@ -112,12 +112,32 @@ export function mapApproval(q: any): ApprovalItem {
 
 // ─── Fulfillment ────────────────────────────────────────────────
 export function mapFulfillment(data: any): FulfillmentItem {
-  const splits: WarehouseSplit[] = (data.splits || []).map((s: any) => ({
-    warehouseName: s.warehouse?.name || s.warehouseName || `Warehouse ${s.warehouseId}`,
-    quantityFulfilled: num(s.quantityAllocated || s.quantity),
-    stockAvailable: num(s.stockAvailable || s.quantityOnHand),
-    estimatedCost: num(s.estimatedCost || 0),
-    shipmentCount: 1,
+  const sourceSplits = (data.warehouse_splits && data.warehouse_splits.length > 0)
+    ? data.warehouse_splits
+    : (data.splits || []);
+
+  const splits: WarehouseSplit[] = sourceSplits.map((s: any) => ({
+    warehouseId: s.warehouse_id || s.warehouseId,
+    warehouseName: s.warehouse_name || s.warehouse?.name || s.warehouseName || `Warehouse ${s.warehouseId || ''}`,
+    quantityFulfilled: num(s.quantity_fulfilled || s.quantityAllocated || s.quantity),
+    stockAvailable: num(s.stock_available || s.stockAvailable || s.quantityOnHand),
+    estimatedCost: num(s.estimated_cost || s.estimatedCost || 0),
+    shipmentCount: num(s.shipment_count || 1),
+    shippingCostWeight: num(s.shipping_cost_weight || 1.0),
+    items: (s.items || []).map((it: any) => ({
+      quoteLineId: it.quote_line_id || it.quoteLineId,
+      productId: it.product_id || it.productId,
+      productName: it.product_name || it.productName || 'Item',
+      quantity: num(it.quantity),
+    })),
+  }));
+
+  const backorderedList = (data.backordered || []).map((b: any) => ({
+    id: b.id,
+    quoteLineId: b.quote_line_id || b.quoteLineId,
+    productId: b.product_id || b.productId,
+    productName: b.product_name || b.productName || 'Product',
+    quantity: num(b.quantity_backordered || b.quantityRemaining || b.quantity),
   }));
 
   return {
@@ -129,6 +149,8 @@ export function mapFulfillment(data: any): FulfillmentItem {
     status: data.status || 'Ready',
     responsible: data.performedBy || data.responsible || 'Operations',
     lines: (data.lines || []).map((l: any) => ({
+      id: l.id,
+      productId: l.productId,
       productName: l.product?.name || l.productName || '',
       description: l.description || '',
       demand: num(l.quantity),
@@ -136,7 +158,9 @@ export function mapFulfillment(data: any): FulfillmentItem {
       unit: l.product?.unit || l.unit || 'Units',
     })),
     splits,
-    backorderPrompt: (data.backordered || []).length > 0,
+    totalShippingCost: num(data.total_estimated_shipping_cost || 0),
+    backorderPrompt: backorderedList.length > 0,
+    backorderedItems: backorderedList,
   };
 }
 

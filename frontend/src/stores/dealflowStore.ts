@@ -57,11 +57,19 @@ export interface ApprovalItem {
 }
 
 export interface WarehouseSplit {
+  warehouseId?: number | string;
   warehouseName: string;
   quantityFulfilled: number;
   stockAvailable: number;
   estimatedCost: number;
   shipmentCount: number;
+  shippingCostWeight?: number;
+  items?: {
+    quoteLineId?: number;
+    productId?: number;
+    productName: string;
+    quantity: number;
+  }[];
 }
 
 export interface FulfillmentItem {
@@ -73,6 +81,8 @@ export interface FulfillmentItem {
   status: 'Draft' | 'Ready' | 'Picking' | 'Shipped' | 'Done' | 'Cancelled';
   responsible: string;
   lines: {
+    id?: number | string;
+    productId?: number | string;
     productName: string;
     description: string;
     demand: number;
@@ -80,7 +90,15 @@ export interface FulfillmentItem {
     unit: string;
   }[];
   splits: WarehouseSplit[];
+  totalShippingCost?: number;
   backorderPrompt?: boolean;
+  backorderedItems?: {
+    id?: number;
+    quoteLineId?: number;
+    productId?: number;
+    productName: string;
+    quantity: number;
+  }[];
 }
 
 export interface SubscriptionItem {

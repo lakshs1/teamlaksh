@@ -35,11 +35,29 @@ export interface BackorderItem {
   quantity_backordered: number;
 }
 
+export interface WarehouseSummarySplit {
+  warehouse_id: number;
+  warehouse_name: string;
+  quantity_fulfilled: number;
+  stock_available: number;
+  shipment_count: number;
+  estimated_cost: number;
+  shipping_cost_weight?: number;
+  items: Array<{
+    quote_line_id: number;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+  }>;
+}
+
 export interface SplitRecommendationResult {
   quote_id: number;
   splits: SplitItem[];
+  warehouse_splits: WarehouseSummarySplit[];
   backordered: BackorderItem[];
   total_shipments: number;
+  total_estimated_shipping_cost: number;
   can_fulfill_completely: boolean;
 }
 
@@ -77,8 +95,10 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
     return {
       quote_id: quoteId,
       splits: [],
+      warehouse_splits: [],
       backordered: [],
       total_shipments: 0,
+      total_estimated_shipping_cost: 0,
       can_fulfill_completely: true,
     };
   }
@@ -89,8 +109,10 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
     return {
       quote_id: quoteId,
       splits: [],
+      warehouse_splits: [],
       backordered: [],
       total_shipments: 0,
+      total_estimated_shipping_cost: 0,
       can_fulfill_completely: true,
     };
   }
@@ -175,11 +197,50 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
   const total_shipments = uniqueWarehouses.size;
   const can_fulfill_completely = backordered.length === 0;
 
+  // Build warehouse summaries with calculated shipping cost and item details
+  const warehouse_splits: WarehouseSummarySplit[] = [];
+  let totalOrderShippingCost = 0;
+
+  for (const wh of activeWarehouses) {
+    const whSplits = splits.filter((s) => s.warehouse_id === wh.id);
+    if (whSplits.length === 0) continue;
+
+    const totalQty = whSplits.reduce((acc, s) => acc + s.quantity, 0);
+    const weight = Number(wh.shippingCostWeight) || 1.0;
+    // Base shipment rate ₹1,200 weighted by warehouse distance factor and package quantity
+    const estimatedCost = Math.round(1200 * weight + totalQty * 25);
+    totalOrderShippingCost += estimatedCost;
+
+    // Total available stock in warehouse
+    let whStockTotal = 0;
+    for (const [key, qty] of stockAvailableMap.entries()) {
+      if (key.startsWith(`${wh.id}_`)) whStockTotal += qty;
+    }
+
+    warehouse_splits.push({
+      warehouse_id: wh.id,
+      warehouse_name: wh.name,
+      quantity_fulfilled: totalQty,
+      stock_available: whStockTotal + totalQty,
+      shipment_count: 1,
+      estimated_cost: estimatedCost,
+      shipping_cost_weight: weight,
+      items: whSplits.map((s) => ({
+        quote_line_id: s.quote_line_id,
+        product_id: s.product_id,
+        product_name: s.product_name,
+        quantity: s.quantity,
+      })),
+    });
+  }
+
   return {
     quote_id: quoteId,
     splits,
+    warehouse_splits,
     backordered,
     total_shipments,
+    total_estimated_shipping_cost: totalOrderShippingCost,
     can_fulfill_completely,
   };
 }
@@ -570,3 +631,272 @@ export async function updateWarehouseStock(
     warehouse_name: wh.name,
   };
 }
+
+// ═══════════════════════════════════════════════════════════
+// BACKORDER CONSOLIDATION & RESTOCK CHECK (PRD B6)
+// ═══════════════════════════════════════════════════════════
+
+export async function checkBackordersRestock(quoteId: number) {
+  // 1. Fetch quote
+  await getQuoteOrThrow(quoteId);
+
+  // 2. Fetch open backorders for quote
+  const openBackorders = await db
+    .select()
+    .from(backorders)
+    .where(and(eq(backorders.quoteId, quoteId), eq(backorders.status, "open")));
+
+  if (openBackorders.length === 0) {
+    return {
+      has_new_stock: false,
+      can_consolidate: false,
+      backorders: [],
+      restocked_items: [],
+      message: "No open backorders for this order.",
+    };
+  }
+
+  const productIds = Array.from(new Set(openBackorders.map((b) => b.productId)));
+  const productRows = await db.select().from(products).where(inArray(products.id, productIds));
+  const productMap = new Map(productRows.map((p) => [p.id, p]));
+
+  // 3. Check live available stock across active warehouses
+  const stockRows = await db
+    .select()
+    .from(warehouseStock)
+    .where(inArray(warehouseStock.productId, productIds));
+
+  const activeWhs = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight));
+
+  const restockedItems: Array<{
+    backorder_id: number;
+    quote_line_id: number;
+    product_id: number;
+    product_name: string;
+    quantity_backordered: number;
+    quantity_available_now: number;
+    preferred_warehouse_id: number;
+    preferred_warehouse_name: string;
+  }> = [];
+
+  let canConsolidateAny = false;
+
+  for (const bo of openBackorders) {
+    const prod = productMap.get(bo.productId);
+    const prodName = prod ? prod.name : `Product #${bo.productId}`;
+
+    // Find if any active warehouse has available stock
+    for (const wh of activeWhs) {
+      const stock = stockRows.find(
+        (s) => s.warehouseId === wh.id && s.productId === bo.productId
+      );
+      const available = stock ? Math.max(0, stock.quantityOnHand - stock.quantityReserved) : 0;
+
+      if (available > 0) {
+        canConsolidateAny = true;
+        restockedItems.push({
+          backorder_id: bo.id,
+          quote_line_id: bo.quoteLineId,
+          product_id: bo.productId,
+          product_name: prodName,
+          quantity_backordered: bo.quantityRemaining,
+          quantity_available_now: available,
+          preferred_warehouse_id: wh.id,
+          preferred_warehouse_name: wh.name,
+        });
+        break; // matched with lowest cost warehouse
+      }
+    }
+  }
+
+  return {
+    has_new_stock: canConsolidateAny,
+    can_consolidate: canConsolidateAny,
+    backorders: openBackorders.map((b) => ({
+      id: b.id,
+      quote_line_id: b.quoteLineId,
+      product_id: b.productId,
+      quantity_backordered: b.quantityRemaining,
+      product_name: productMap.get(b.productId)?.name || `Product #${b.productId}`,
+    })),
+    restocked_items: restockedItems,
+  };
+}
+
+export async function consolidateBackorders(quoteId: number, userId: number) {
+  const quote = await getQuoteOrThrow(quoteId);
+
+  const openBackorders = await db
+    .select()
+    .from(backorders)
+    .where(and(eq(backorders.quoteId, quoteId), eq(backorders.status, "open")));
+
+  if (openBackorders.length === 0) {
+    return {
+      success: true,
+      consolidated_count: 0,
+      message: "No open backorders found to consolidate.",
+    };
+  }
+
+  const activeWhs = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight));
+
+  const consolidated: any[] = [];
+
+  for (const bo of openBackorders) {
+    let remaining = bo.quantityRemaining;
+
+    for (const wh of activeWhs) {
+      if (remaining <= 0) break;
+
+      const [stock] = await db
+        .select()
+        .from(warehouseStock)
+        .where(
+          and(
+            eq(warehouseStock.warehouseId, wh.id),
+            eq(warehouseStock.productId, bo.productId)
+          )
+        )
+        .limit(1);
+
+      const available = stock ? Math.max(0, stock.quantityOnHand - stock.quantityReserved) : 0;
+      if (available <= 0) continue;
+
+      const take = Math.min(remaining, available);
+
+      // Create fulfillment split
+      const [splitRecord] = await db
+        .insert(fulfillmentSplits)
+        .values({
+          quoteId,
+          quoteLineId: bo.quoteLineId,
+          warehouseId: wh.id,
+          quantity: take,
+          quantityAllocated: take,
+          quantityFulfilled: 0,
+          isBackordered: false,
+          status: "allocated",
+          allocatedBy: userId,
+          notes: "Consolidated backorder allocation from newly arrived stock",
+        })
+        .returning();
+
+      consolidated.push(splitRecord);
+
+      // Decrement stock
+      await db
+        .update(warehouseStock)
+        .set({
+          quantity: sql`${warehouseStock.quantity} - ${take}`,
+          quantityOnHand: sql`${warehouseStock.quantityOnHand} - ${take}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(warehouseStock.id, stock.id));
+
+      // Stock movement audit
+      await db.insert(stockMovements).values({
+        warehouseId: wh.id,
+        productId: bo.productId,
+        quantityChange: -take,
+        movementType: "backorder_consolidation",
+        referenceId: quote.quoteNumber,
+        performedBy: userId,
+        notes: `Backorder consolidated for quote ${quote.quoteNumber}`,
+      });
+
+      remaining -= take;
+    }
+
+    // Update backorder record
+    if (remaining <= 0) {
+      await db
+        .update(backorders)
+        .set({
+          quantityRemaining: 0,
+          status: "resolved",
+          resolvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(backorders.id, bo.id));
+    } else if (remaining < bo.quantityRemaining) {
+      await db
+        .update(backorders)
+        .set({
+          quantityRemaining: remaining,
+          status: "partially_resolved",
+          updatedAt: new Date(),
+        })
+        .where(eq(backorders.id, bo.id));
+    }
+  }
+
+  // Audit log
+  await db.insert(approvalLogs).values({
+    quoteId,
+    reviewerId: userId,
+    action: "backorder_consolidated",
+    level: "operations",
+    reason: `Consolidated ${consolidated.length} backorder splits following inbound restock`,
+  });
+
+  return {
+    success: true,
+    consolidated_count: consolidated.length,
+    message: `Successfully consolidated ${consolidated.length} backordered items into active fulfillment splits.`,
+  };
+}
+
+export async function simulateInboundRestock(quoteId: number, userId?: number) {
+  const openBackorders = await db
+    .select()
+    .from(backorders)
+    .where(and(eq(backorders.quoteId, quoteId), eq(backorders.status, "open")));
+
+  let targetProductIds: number[] = [];
+  if (openBackorders.length > 0) {
+    targetProductIds = openBackorders.map((b) => b.productId);
+  } else {
+    // If no backorder record committed yet, get from split calculation
+    const rec = await calculateWarehouseSplit(quoteId);
+    targetProductIds = rec.backordered.map((b) => b.product_id);
+  }
+
+  const [primaryWh] = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight))
+    .limit(1);
+
+  if (!primaryWh) throw ApiError.badRequest("No active warehouse found for restock");
+
+  let restockedCount = 0;
+  for (const pid of targetProductIds) {
+    await updateWarehouseStock(
+      primaryWh.id,
+      {
+        product_id: pid,
+        quantity: 50,
+      },
+      userId
+    );
+    restockedCount++;
+  }
+
+  return {
+    success: true,
+    warehouse_name: primaryWh.name,
+    restocked_products_count: restockedCount,
+    message: `Restocked inbound inventory (+50 units) at ${primaryWh.name} for ${restockedCount} products.`,
+  };
+}
+

@@ -226,6 +226,18 @@ export const fulfillmentApi = {
     const res = await api.post(`/fulfillment/warehouses/${warehouseId}/stock`, data);
     return res.data;
   },
+  checkBackordersRestock: async (quoteId: number | string) => {
+    const res = await api.get(`/fulfillment/quotes/${quoteId}/backorders/check-restock`);
+    return res.data;
+  },
+  consolidateBackorders: async (quoteId: number | string) => {
+    const res = await api.post(`/fulfillment/quotes/${quoteId}/backorders/consolidate`);
+    return res.data;
+  },
+  simulateRestock: async (quoteId: number | string) => {
+    const res = await api.post(`/fulfillment/quotes/${quoteId}/backorders/simulate-restock`);
+    return res.data;
+  },
 };
 
 // 8. Subscriptions & Invoicing API

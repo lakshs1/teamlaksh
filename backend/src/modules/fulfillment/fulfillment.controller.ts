@@ -7,6 +7,9 @@ import {
   createWarehouse,
   getWarehouseStock,
   updateWarehouseStock,
+  checkBackordersRestock,
+  consolidateBackorders,
+  simulateInboundRestock,
 } from "./fulfillment.service.js";
 import {
   createWarehouseSchema,
@@ -90,6 +93,41 @@ export async function updateWarehouseStockHandler(req: Request, res: Response, n
     const userId = (req as any).user?.id;
     const body = updateStockSchema.parse(req.body);
     const data = await updateWarehouseStock(warehouseId, body, userId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function checkBackordersRestockHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const quoteId = Number(req.params.quoteId);
+    if (isNaN(quoteId)) throw ApiError.badRequest("Invalid quote ID");
+    const data = await checkBackordersRestock(quoteId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function consolidateBackordersHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const quoteId = Number(req.params.quoteId);
+    if (isNaN(quoteId)) throw ApiError.badRequest("Invalid quote ID");
+    const userId = (req as any).user?.id || 1;
+    const data = await consolidateBackorders(quoteId, userId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function simulateInboundRestockHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const quoteId = Number(req.params.quoteId);
+    if (isNaN(quoteId)) throw ApiError.badRequest("Invalid quote ID");
+    const userId = (req as any).user?.id || 1;
+    const data = await simulateInboundRestock(quoteId, userId);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
