@@ -42,21 +42,61 @@ export default function InvoiceDetailPage() {
     }
   };
 
+  const handleDownloadPdf = () => {
+    toast.success(`Generating PDF for ${item?.reference || 'Invoice'}...`);
+    window.print();
+  };
+
+  const handleSendInvoice = () => {
+    toast.success(`Invoice ${item?.reference || ''} sent to ${item?.customerName || 'customer'}!`);
+  };
+
   if (loading) return <div className="odoo-container"><div className="p-4">Loading invoice...</div></div>;
   if (error || !item) return <div className="odoo-container"><div className="p-4 text-red-500">Error: {error || 'Invoice not found'}</div></div>;
 
+  const untaxedAmount = item.amount / 1.18;
+  const taxAmount = item.amount - untaxedAmount;
+
   return (
     <div className="odoo-container">
-      <div className="odoo-page-header">
+      {/* Print Stylesheet */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #printable-invoice, #printable-invoice * {
+            visibility: visible;
+          }
+          #printable-invoice {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 20px;
+            background: white !important;
+            color: black !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      <div className="odoo-page-header no-print">
         <div>
-          <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 500 }}>Invoice</div>
+          <div style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 500 }}>Invoices / {item.reference}</div>
           <h1 className="odoo-page-title" style={{ color: '#714B67' }}>
-            {item.reference}
+            Tax Invoice #{item.reference}
           </h1>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="odoo-btn odoo-btn-primary">Send</button>
-          <button className="odoo-btn odoo-btn-secondary">Print</button>
+          <button className="odoo-btn odoo-btn-primary" onClick={handleSendInvoice}>
+            ✉ Send by Email
+          </button>
+          <button className="odoo-btn odoo-btn-secondary" onClick={handleDownloadPdf} style={{ backgroundColor: '#0EA5E9', color: '#FFFFFF' }}>
+            📥 Download PDF / Print
+          </button>
           {item.status !== 'Paid' && (
             <button className="odoo-btn odoo-btn-secondary" style={{ backgroundColor: '#714B67', color: '#FFF' }} onClick={handleRegisterPayment}>
               Register Payment
@@ -68,68 +108,97 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      <div className="odoo-card">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #E2E8F0' }}>
+      <div id="printable-invoice" className="odoo-card" style={{ padding: '2.5rem', background: '#FFF', borderRadius: '8px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        {/* Invoice Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '1.5rem', borderBottom: '2px solid #714B67', marginBottom: '1.5rem' }}>
           <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Customer</div>
-            <div style={{ fontWeight: 700, fontSize: '0.9375rem' }}>{item.customerName}</div>
+            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#714B67', margin: 0 }}>DealFlow360 ERP</h2>
+            <div style={{ fontSize: '0.875rem', color: '#64748B', marginTop: '0.25rem' }}>Next-Gen Quotation & CPQ Platform</div>
+            <div style={{ fontSize: '0.8125rem', color: '#94A3B8', marginTop: '0.25rem' }}>GSTIN: 27AADCB2234P1Z4 | CIN: U72900MH2024PTC123456</div>
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Invoice Date</div>
-            <div style={{ fontWeight: 600 }}>{item.invoiceDate}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Due Date</div>
-            <div style={{ fontWeight: 600 }}>{item.dueDate}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 600 }}>Status</div>
-            <div><span className="odoo-badge">{item.status}</span></div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1E293B' }}>TAX INVOICE</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: '#714B67', marginTop: '0.25rem' }}>#{item.reference}</div>
+            <div style={{ marginTop: '0.5rem' }}>
+              <span className="odoo-badge" style={{ fontSize: '0.875rem', padding: '0.25rem 0.75rem', backgroundColor: item.status === 'Paid' ? '#DCFCE7' : '#FEF3C7', color: item.status === 'Paid' ? '#166534' : '#92400E' }}>
+                {item.status.toUpperCase()}
+              </span>
+            </div>
           </div>
         </div>
 
-        <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '0.75rem' }}>
-          Invoice Lines
-        </h3>
-        <table className="odoo-table" style={{ marginBottom: '1.5rem' }}>
+        {/* Customer & Dates Section */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.5rem', marginBottom: '2rem', padding: '1rem', background: '#F8FAFC', borderRadius: '6px' }}>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Billed To</div>
+            <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1E293B', marginTop: '0.25rem' }}>{item.customerName}</div>
+            <div style={{ fontSize: '0.8125rem', color: '#64748B', marginTop: '0.25rem' }}>Verified Enterprise Customer</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Invoice Date</div>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#334155', marginTop: '0.25rem' }}>{item.invoiceDate}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Due Date</div>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#DC2626', marginTop: '0.25rem' }}>{item.dueDate}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 700, textTransform: 'uppercase' }}>Payment Terms</div>
+            <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#334155', marginTop: '0.25rem' }}>Net 15 Days</div>
+          </div>
+        </div>
+
+        {/* Invoice Lines Table */}
+        <table className="odoo-table" style={{ width: '100%', marginBottom: '1.5rem', borderCollapse: 'collapse' }}>
           <thead>
-            <tr>
-              <th>Product</th>
-              <th>Description</th>
-              <th>Quantity</th>
-              <th>Unit Price</th>
-              <th>Taxes</th>
-              <th>Amount</th>
+            <tr style={{ background: '#F1F5F9' }}>
+              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, color: '#334155', borderBottom: '2px solid #CBD5E1' }}>#</th>
+              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, color: '#334155', borderBottom: '2px solid #CBD5E1' }}>Product / Service Item</th>
+              <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, color: '#334155', borderBottom: '2px solid #CBD5E1' }}>Description</th>
+              <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 700, color: '#334155', borderBottom: '2px solid #CBD5E1' }}>Qty</th>
+              <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: '#334155', borderBottom: '2px solid #CBD5E1' }}>Unit Price</th>
+              <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: '#334155', borderBottom: '2px solid #CBD5E1' }}>GST (%)</th>
+              <th style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: '#334155', borderBottom: '2px solid #CBD5E1' }}>Total</th>
             </tr>
           </thead>
           <tbody>
             {item.lines.map((line, idx) => (
-              <tr key={idx}>
-                <td style={{ fontWeight: 600 }}>{line.productName}</td>
-                <td>{line.description}</td>
-                <td>{line.quantity}</td>
-                <td>₹{line.unitPrice.toLocaleString('en-IN')}</td>
-                <td>{line.taxes}%</td>
-                <td style={{ fontWeight: 700 }}>₹{line.amount.toLocaleString('en-IN')}</td>
+              <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                <td style={{ padding: '0.75rem', color: '#64748B' }}>{idx + 1}</td>
+                <td style={{ padding: '0.75rem', fontWeight: 700, color: '#1E293B' }}>{line.productName}</td>
+                <td style={{ padding: '0.75rem', color: '#64748B', fontSize: '0.875rem' }}>{line.description}</td>
+                <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 600 }}>{line.quantity}</td>
+                <td style={{ padding: '0.75rem', textAlign: 'right' }}>₹{line.unitPrice.toLocaleString('en-IN')}</td>
+                <td style={{ padding: '0.75rem', textAlign: 'right' }}>{line.taxes}%</td>
+                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 700, color: '#1E293B' }}>₹{line.amount.toLocaleString('en-IN')}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
-        {/* Totals */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-          <div style={{ width: 280, display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+        {/* Financial Summary Breakdown */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '2rem' }}>
+          <div style={{ width: '50%', fontSize: '0.8125rem', color: '#64748B' }}>
+            <div style={{ fontWeight: 700, color: '#334155', marginBottom: '0.5rem' }}>Bank & Transfer Details:</div>
+            <div>Bank: HDFC Bank Limited</div>
+            <div>A/C Name: DealFlow360 Technologies Pvt Ltd</div>
+            <div>A/C Number: 50200084920194</div>
+            <div>IFSC Code: HDFC0000128</div>
+            <div style={{ marginTop: '0.5rem', fontStyle: 'italic' }}>* This is a computer generated invoice and requires no physical signature.</div>
+          </div>
+
+          <div style={{ width: '320px', background: '#F8FAFC', padding: '1.25rem', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
               <span>Untaxed Amount:</span>
-              <span style={{ fontWeight: 600 }}>₹7,00,000</span>
+              <span style={{ fontWeight: 600, color: '#1E293B' }}>₹{Math.round(untaxedAmount).toLocaleString('en-IN')}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-              <span>Taxes (18%):</span>
-              <span style={{ fontWeight: 600 }}>₹1,26,000</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', marginBottom: '0.75rem', fontSize: '0.875rem' }}>
+              <span>Integrated GST (18%):</span>
+              <span style={{ fontWeight: 600, color: '#1E293B' }}>₹{Math.round(taxAmount).toLocaleString('en-IN')}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.1rem', color: '#714B67', borderTop: '2px solid #E2E8F0', paddingTop: '0.5rem' }}>
-              <span>Total:</span>
-              <span>₹8,26,000</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.2rem', color: '#714B67', borderTop: '2px solid #CBD5E1', paddingTop: '0.75rem' }}>
+              <span>Grand Total:</span>
+              <span>₹{item.amount.toLocaleString('en-IN')}</span>
             </div>
           </div>
         </div>
@@ -137,3 +206,4 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
+

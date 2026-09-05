@@ -34,11 +34,33 @@ export default function ReportsPage() {
   }, [period, rep, status, category]);
 
   const handleExportPdf = () => {
-    toast.success('Exporting Sales Performance Report as PDF...');
+    toast.success('Opening print dialog for PDF export...');
+    window.print();
   };
 
   const handleExportXls = () => {
-    toast.success('Exporting Sales Performance Data as XLS spreadsheet...');
+    try {
+      const headers = ['Sales Rep', 'Quotations Created', 'Approved Deals', 'Avg Discount', 'Total Revenue'];
+      const rows = tableRows.map((r: any) => [
+        `"${r.name || r.repName}"`,
+        r.quotes || r.quotationsCreated || 0,
+        r.approved || r.approvedDeals || 0,
+        `"${r.discount || r.avgDiscount || '0%'}"`,
+        `"${(r.revenue || r.totalRevenue || '$0').replace(/"/g, '""')}"`
+      ]);
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `DealFlow360_Sales_Report_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('Sales performance report exported as CSV/XLS!');
+    } catch (err: any) {
+      toast.error('Failed to export XLS');
+    }
   };
 
   // Safe defaults if API data is missing
@@ -57,17 +79,33 @@ export default function ReportsPage() {
 
   return (
     <div className="odoo-container">
+      {/* Print Stylesheet */}
+      <style>{`
+        @media print {
+          .no-print, .odoo-navbar, button {
+            display: none !important;
+          }
+          body {
+            background: white !important;
+          }
+          .odoo-container {
+            width: 100% !important;
+            padding: 0 !important;
+          }
+        }
+      `}</style>
+
       <div className="odoo-page-header">
         <div>
           <h1 className="odoo-page-title">Reporting & Performance Analytics (A7)</h1>
           <p className="text-muted text-sm">Analyze quotation velocity, approval bottlenecks, best-selling products, and discount patterns.</p>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem' }} className="no-print">
           <button className="odoo-btn odoo-btn-secondary" onClick={handleExportPdf}>
-            Export PDF
+            📄 Export PDF
           </button>
           <button className="odoo-btn odoo-btn-primary" onClick={handleExportXls}>
-            Export XLS
+            📊 Export XLS
           </button>
         </div>
       </div>
