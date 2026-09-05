@@ -16,10 +16,6 @@ export default function FulfillmentListPage() {
     const fetchFulfillments = async () => {
       try {
         setLoading(true);
-        // Fetch quotes with fulfillment status
-        const res = await quoteApi.getQuotes({ status: 'fulfillment' });
-        const data = res.data?.quotes ?? res.data ?? [];
-        setFulfillments(data.map(mapFulfillment));
         // Fetch quotes ready for or in fulfillment (PRD B6: approved quotes automatically move to fulfillment split)
         const res = await quoteApi.getQuotes({ status: 'approved,fulfillment,confirmed' });
         const items = res.data?.items ?? res.data?.quotes ?? (Array.isArray(res.data) ? res.data : []);
@@ -79,40 +75,42 @@ export default function FulfillmentListPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredFulfillments.map((f) => (
-                <tr key={f.id}>
-                  <td><input type="checkbox" /></td>
-                  <td style={{ fontWeight: 700, color: '#714B67' }}>{f.reference}</td>
-                  <td style={{ fontWeight: 600 }}>{f.customerName}</td>
-                  <td>{f.scheduledDate}</td>
-                  <td>{f.responsible}</td>
-                  <td>
-                    <span className="odoo-badge">{f.status}</span>
-                    <span
-                      className="odoo-badge"
-                      style={{
-                        backgroundColor:
-                          f.status === 'confirmed' || f.status === 'Done' ? '#DCFCE7' :
-                          f.status === 'approved' ? '#FEF3C7' : '#F1F5F9',
-                        color:
-                          f.status === 'confirmed' || f.status === 'Done' ? '#15803D' :
-                          f.status === 'approved' ? '#B45309' : '#475569',
-                      }}
-                    >
-                      {f.status === 'approved' ? 'Ready for Split' : f.status === 'confirmed' ? 'Dispatched' : f.status}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      className="odoo-btn odoo-btn-secondary"
-                      style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
-                      onClick={() => navigate(`/fulfillment/${f.id}`)}
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredFulfillments.map((f) => {
+                const isDispatched = String(f.status).toLowerCase() === 'confirmed' || String(f.status).toLowerCase() === 'done';
+                const isReady = String(f.status).toLowerCase() === 'approved';
+
+                return (
+                  <tr key={f.id}>
+                    <td><input type="checkbox" /></td>
+                    <td style={{ fontWeight: 700, color: '#714B67' }}>{f.reference}</td>
+                    <td style={{ fontWeight: 600 }}>{f.customerName}</td>
+                    <td>{f.scheduledDate}</td>
+                    <td>{f.responsible}</td>
+                    <td>
+                      <span
+                        className="odoo-badge"
+                        style={{
+                          backgroundColor: isDispatched ? '#DCFCE7' : isReady ? '#FEF3C7' : '#F1F5F9',
+                          color: isDispatched ? '#15803D' : isReady ? '#B45309' : '#475569',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {isReady ? 'Ready for Split' : isDispatched ? 'Dispatched' : f.status}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className="odoo-btn odoo-btn-secondary"
+                        style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                        onClick={() => navigate(`/fulfillment/${f.id}`)}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
               {filteredFulfillments.length === 0 && (
                 <tr>
                   <td colSpan={7} style={{ textAlign: 'center', padding: '1rem' }}>No fulfillments found.</td>

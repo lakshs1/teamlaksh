@@ -84,8 +84,8 @@ export interface FulfillmentItem {
   quotationReference: string;
   customerName: string;
   scheduledDate: string;
-  status: 'Draft' | 'Ready' | 'Picking' | 'Shipped' | 'Done' | 'Cancelled';
   status: 'Draft' | 'Ready' | 'Picking' | 'Shipped' | 'Done' | 'Cancelled' | string;
+
   responsible: string;
   lines: {
     id?: number | string;
