@@ -1,5 +1,4 @@
 import { eq } from "drizzle-orm";
-import { randomBytes } from "crypto";
 import { db } from "../../config/db.js";
 import { users } from "../../db/schema/index.js";
 import { hashPassword, comparePassword } from "../../lib/password.js";
@@ -8,24 +7,25 @@ import { ApiError } from "../../lib/api-error.js";
 import type { SafeUser } from "../../db/schema/users.js";
 
 // ═══════════════════════════════════════════════════════════
-// AUTH SERVICE — Business logic layer
+// AUTH SERVICE — DealFlow360 Auth Business Logic
 // ═══════════════════════════════════════════════════════════
 
 /**
  * Strip sensitive fields from a user record.
  */
 function toSafeUser(user: typeof users.$inferSelect): SafeUser {
-  const { password, refreshToken, verificationToken, resetToken, resetTokenExpiry, ...safe } = user;
+  const { password, refreshToken, ...safe } = user;
   return safe;
 }
 
 /**
- * Register a new user.
+ * Register a new user with role (defaults to 'rep').
  */
 export async function register(data: {
   email: string;
   password: string;
   name: string;
+  role?: string;
 }) {
   // Check if email already taken
   const existing = await db
@@ -41,17 +41,14 @@ export async function register(data: {
   // Hash password
   const hashedPassword = await hashPassword(data.password);
 
-  // Generate email verification token
-  const verificationToken = randomBytes(32).toString("hex");
-
-  // Create user
+  // Create user in PostgreSQL
   const [user] = await db
     .insert(users)
     .values({
       email: data.email,
       password: hashedPassword,
       name: data.name,
-      verificationToken,
+      role: data.role || "rep",
     })
     .returning();
 
@@ -64,9 +61,6 @@ export async function register(data: {
     .update(users)
     .set({ refreshToken: tokens.refreshToken })
     .where(eq(users.id, user.id));
-
-  // Log verification token (no email service in template)
-  console.log(`📧 Email verification token for ${user.email}: ${verificationToken}`);
 
   return {
     user: toSafeUser(user),
@@ -84,13 +78,17 @@ export async function login(data: { email: string; password: string }) {
     .where(eq(users.email, data.email))
     .limit(1);
 
-  if (!user) {
+  if (!user || !user.password) {
     throw ApiError.unauthorized("Invalid email or password");
   }
 
   const isValidPassword = await comparePassword(data.password, user.password);
   if (!isValidPassword) {
     throw ApiError.unauthorized("Invalid email or password");
+  }
+
+  if (!user.isActive) {
+    throw ApiError.forbidden("User account is inactive");
   }
 
   // Generate tokens
@@ -100,7 +98,7 @@ export async function login(data: { email: string; password: string }) {
   // Store refresh token
   await db
     .update(users)
-    .set({ refreshToken: tokens.refreshToken })
+    .set({ refreshToken: tokens.refreshToken, updatedAt: new Date() })
     .where(eq(users.id, user.id));
 
   return {
@@ -112,11 +110,11 @@ export async function login(data: { email: string; password: string }) {
 /**
  * Logout — invalidate refresh token.
  */
-export async function logout(userId: string) {
+export async function logout(userId: number | string) {
   await db
     .update(users)
     .set({ refreshToken: null })
-    .where(eq(users.id, userId));
+    .where(eq(users.id, Number(userId)));
 }
 
 /**
@@ -136,11 +134,15 @@ export async function refresh(refreshTokenValue: string) {
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.id, decoded.id))
+    .where(eq(users.id, Number(decoded.id)))
     .limit(1);
 
   if (!user || user.refreshToken !== refreshTokenValue) {
     throw ApiError.unauthorized("Invalid refresh token");
+  }
+
+  if (!user.isActive) {
+    throw ApiError.forbidden("User account is inactive");
   }
 
   // Generate new token pair (rotation)
@@ -150,7 +152,7 @@ export async function refresh(refreshTokenValue: string) {
   // Store new refresh token
   await db
     .update(users)
-    .set({ refreshToken: tokens.refreshToken })
+    .set({ refreshToken: tokens.refreshToken, updatedAt: new Date() })
     .where(eq(users.id, user.id));
 
   return {
@@ -160,99 +162,13 @@ export async function refresh(refreshTokenValue: string) {
 }
 
 /**
- * Forgot password — generate reset token.
- * Logs token to console (no email service in template).
- */
-export async function forgotPassword(email: string) {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  // Always return success to prevent email enumeration
-  if (!user) {
-    return;
-  }
-
-  const resetToken = randomBytes(32).toString("hex");
-  const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-  await db
-    .update(users)
-    .set({ resetToken, resetTokenExpiry })
-    .where(eq(users.id, user.id));
-
-  // Log token (swap with real email service during hackathon)
-  console.log(`🔑 Password reset token for ${email}: ${resetToken}`);
-  console.log(`   Expires at: ${resetTokenExpiry.toISOString()}`);
-}
-
-/**
- * Reset password using a valid reset token.
- */
-export async function resetPassword(token: string, newPassword: string) {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.resetToken, token))
-    .limit(1);
-
-  if (!user) {
-    throw ApiError.badRequest("Invalid reset token");
-  }
-
-  if (!user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
-    throw ApiError.badRequest("Reset token has expired");
-  }
-
-  const hashedPassword = await hashPassword(newPassword);
-
-  await db
-    .update(users)
-    .set({
-      password: hashedPassword,
-      resetToken: null,
-      resetTokenExpiry: null,
-    })
-    .where(eq(users.id, user.id));
-}
-
-/**
- * Verify email using verification token.
- */
-export async function verifyEmail(token: string) {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.verificationToken, token))
-    .limit(1);
-
-  if (!user) {
-    throw ApiError.badRequest("Invalid verification token");
-  }
-
-  if (user.emailVerified) {
-    throw ApiError.badRequest("Email already verified");
-  }
-
-  await db
-    .update(users)
-    .set({
-      emailVerified: true,
-      verificationToken: null,
-    })
-    .where(eq(users.id, user.id));
-}
-
-/**
  * Get current user by ID.
  */
-export async function getMe(userId: string) {
+export async function getMe(userId: number | string) {
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.id, userId))
+    .where(eq(users.id, Number(userId)))
     .limit(1);
 
   if (!user) {

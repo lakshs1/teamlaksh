@@ -26,10 +26,10 @@ export function setupSwagger(app: Express): void {
   const doc = generator.generateDocument({
     openapi: "3.0.0",
     info: {
-      title: "QuickCourt API v1",
+      title: "DealFlow360 API v1",
       version: "1.0.0",
       description:
-        "Authentication & REST API for QuickCourt. Built with Express, Drizzle ORM & Zod.",
+        "Sales Operations, Quotation, Approval & Fulfillment Engine API. Built with Express, Drizzle ORM & Zod.",
     },
     servers: [{ url: "/api/v1" }, { url: "/api" }],
   });
@@ -39,9 +39,9 @@ export function setupSwagger(app: Express): void {
     swaggerUi.serve,
     swaggerUi.setup(doc, {
       customCss: ".swagger-ui .topbar { display: none }",
-      customSiteTitle: "AmiConnect API Docs",
+      customSiteTitle: "DealFlow360 API Docs",
     })
   );
 
-  console.log("📄 AmiConnect Swagger UI available at /api-docs");
+  console.log("📄 DealFlow360 Swagger UI available at /api-docs");
 }

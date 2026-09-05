@@ -11,22 +11,26 @@ extendZodWithOpenApi(z);
 
 export const registerSchema = z
   .object({
-    email: z.string().email("Invalid email format").openapi({ example: "john@example.com" }),
+    email: z.string().email("Invalid email format").openapi({ example: "rep@dealflow360.dev" }),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
-      .openapi({ example: "securepassword123" }),
+      .openapi({ example: "password123" }),
     name: z
       .string()
       .min(2, "Name must be at least 2 characters")
-      .openapi({ example: "John Doe" }),
+      .openapi({ example: "Jane Sales" }),
+    role: z
+      .enum(["admin", "manager", "rep", "finance"])
+      .default("rep")
+      .openapi({ example: "rep" }),
   })
   .openapi("RegisterRequest");
 
 export const loginSchema = z
   .object({
-    email: z.string().email("Invalid email format").openapi({ example: "john@example.com" }),
-    password: z.string().min(1, "Password is required").openapi({ example: "securepassword123" }),
+    email: z.string().email("Invalid email format").openapi({ example: "rep@dealflow360.dev" }),
+    password: z.string().min(1, "Password is required").openapi({ example: "password123" }),
   })
   .openapi("LoginRequest");
 
@@ -36,39 +40,19 @@ export const refreshSchema = z
   })
   .openapi("RefreshRequest");
 
-export const forgotPasswordSchema = z
-  .object({
-    email: z.string().email("Invalid email format").openapi({ example: "john@example.com" }),
-  })
-  .openapi("ForgotPasswordRequest");
-
-export const resetPasswordSchema = z
-  .object({
-    token: z.string().min(1, "Reset token is required"),
-    newPassword: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .openapi({ example: "newSecurePassword456" }),
-  })
-  .openapi("ResetPasswordRequest");
-
-export const verifyEmailSchema = z
-  .object({
-    token: z.string().min(1, "Verification token is required"),
-  })
-  .openapi("VerifyEmailRequest");
-
 // ═══════════════════════════════════════════════════════════
 // RESPONSE SCHEMAS
 // ═══════════════════════════════════════════════════════════
 
 export const safeUserResponseSchema = z
   .object({
-    id: z.string().uuid(),
+    id: z.number().int().openapi({ example: 1 }),
     email: z.string().email(),
     name: z.string(),
-    role: z.enum(["user", "admin"]),
-    emailVerified: z.boolean(),
+    role: z.string().openapi({ example: "rep" }),
+    avatarUrl: z.string().nullable().optional(),
+    githubUrl: z.string().nullable().optional(),
+    isActive: z.boolean(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   })
@@ -141,41 +125,6 @@ registry.registerPath({
   security: [{ BearerAuth: [] }],
   responses: {
     200: { description: "Logged out", content: { "application/json": { schema: messageResponseSchema } } },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/auth/forgot-password",
-  tags: ["Auth"],
-  summary: "Request password reset",
-  request: { body: { content: { "application/json": { schema: forgotPasswordSchema } } } },
-  responses: {
-    200: { description: "Reset token generated", content: { "application/json": { schema: messageResponseSchema } } },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/auth/reset-password",
-  tags: ["Auth"],
-  summary: "Reset password with token",
-  request: { body: { content: { "application/json": { schema: resetPasswordSchema } } } },
-  responses: {
-    200: { description: "Password reset", content: { "application/json": { schema: messageResponseSchema } } },
-    400: { description: "Invalid or expired token" },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/auth/verify-email",
-  tags: ["Auth"],
-  summary: "Verify email with token",
-  request: { body: { content: { "application/json": { schema: verifyEmailSchema } } } },
-  responses: {
-    200: { description: "Email verified", content: { "application/json": { schema: messageResponseSchema } } },
-    400: { description: "Invalid token" },
   },
 });
 
