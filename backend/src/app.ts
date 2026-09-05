@@ -15,6 +15,8 @@ import quotesRoutes from "./modules/quotes/quotes.routes.js";
 import approvalsRoutes from "./modules/approvals/approvals.routes.js";
 import recommendationsRoutes from "./modules/recommendations/recommendations.routes.js";
 import fulfillmentRoutes from "./modules/fulfillment/fulfillment.routes.js";
+import billingRoutes from "./modules/billing/billing.routes.js";
+import portalRoutes from "./modules/portal/portal.routes.js";
 
 // ── Logger ────────────────────────────────────────────────
 const logger = pino({
@@ -58,6 +60,8 @@ app.use("/api/v1/quotes", quotesRoutes);
 app.use("/api/v1/approvals", approvalsRoutes);
 app.use("/api/v1/recommendations", recommendationsRoutes);
 app.use("/api/v1/fulfillment", fulfillmentRoutes);
+app.use("/api/v1/billing", billingRoutes);
+app.use("/api/v1/portal", portalRoutes);
 
 // ── Error handler (must be last) ──────────────────────────
 app.use(errorHandler);

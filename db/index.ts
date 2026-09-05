@@ -10,7 +10,7 @@ const connectionString =
 export const queryClient = postgres(connectionString, {
   max: 10,
   idle_timeout: 20,
-  connect_timeout: 10,
+  connect_timeout: 30,
 });
 
 // Drizzle ORM instance configured with all schemas & relations
