@@ -11,6 +11,7 @@ import {
   getWarehouseStockHandler,
   updateWarehouseStockHandler,
   replenishWarehouseStockHandler,
+  simulateProductAllocationHandler,
   checkBackordersRestockHandler,
   consolidateBackordersHandler,
   simulateInboundRestockHandler,
@@ -21,6 +22,7 @@ import {
   updateStockSchema,
   replenishStockSchema,
   manualSplitOverrideSchema,
+  simulateAllocationSchema,
 } from "./fulfillment.schemas.js";
 
 const router = Router();
@@ -39,6 +41,14 @@ router.post(
   authorize("rep", "finance", "operations", "finance_operations", "admin"),
   validate({ body: manualSplitOverrideSchema }),
   overrideWarehouseSplitHandler
+);
+
+// ── Auto-Split Simulator (Real Cross-Warehouse Allocation) ─
+router.post(
+  "/simulate-allocation",
+  authenticate,
+  validate({ body: simulateAllocationSchema }),
+  simulateProductAllocationHandler
 );
 
 // ── Backorder Consolidation Mid-Fulfillment (PRD B6) ──────

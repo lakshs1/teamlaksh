@@ -956,6 +956,120 @@ export async function replenishWarehouseStock(
   };
 }
 
+export async function simulateProductAllocation(productId: number, requestedQuantity: number) {
+  const [prod] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  if (!prod) throw ApiError.notFound(`Product with ID ${productId} not found`);
+
+  // Fetch all active warehouses ordered by shipping_cost_weight ASC
+  const activeWarehouses = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight));
+
+  if (activeWarehouses.length === 0) {
+    throw ApiError.badRequest("No active warehouses found for simulation");
+  }
+
+  // Fetch stock rows for this product across all warehouses
+  const stockRows = await db
+    .select()
+    .from(warehouseStock)
+    .where(eq(warehouseStock.productId, productId));
+
+  const stockMap = new Map(stockRows.map((s) => [s.warehouseId, s]));
+
+  // Build warehouse breakdown
+  const breakdown = activeWarehouses.map((wh) => {
+    const s = stockMap.get(wh.id);
+    const onHand = s ? s.quantityOnHand : 0;
+    const reserved = s ? s.quantityReserved : 0;
+    const available = Math.max(0, onHand - reserved);
+    const weight = Number(wh.shippingCostWeight || 1.0);
+    return {
+      warehouse_id: wh.id,
+      warehouse_name: wh.name,
+      warehouse_code: wh.code || `WH-${wh.id}`,
+      location: wh.location || "-",
+      shipping_weight: weight,
+      on_hand: onHand,
+      reserved,
+      available,
+      is_capable: available >= requestedQuantity,
+    };
+  });
+
+  // Step 1: Single-warehouse priority check (ADR-004 shipment minimization)
+  // activeWarehouses is already ordered by shippingCostWeight ASC
+  const singleCapable = breakdown.find((b) => b.available >= requestedQuantity);
+
+  if (singleCapable) {
+    return {
+      mode: "single_shipment",
+      product_id: prod.id,
+      product_name: prod.name,
+      requested_quantity: requestedQuantity,
+      total_shipments: 1,
+      backordered_quantity: 0,
+      explanation: `Minimization Success: Single shipment fulfilled completely by ${singleCapable.warehouse_name} (${singleCapable.warehouse_code}). Prioritized by lowest shipping cost weight (${singleCapable.shipping_weight.toFixed(2)}x) among capable hubs.`,
+      allocations: [
+        {
+          warehouse_id: singleCapable.warehouse_id,
+          warehouse_name: singleCapable.warehouse_name,
+          warehouse_code: singleCapable.warehouse_code,
+          quantity: requestedQuantity,
+          shipping_weight: singleCapable.shipping_weight,
+          is_primary: true,
+        },
+      ],
+      inventory_breakdown: breakdown,
+    };
+  }
+
+  // Step 2: Multi-warehouse greedy split
+  let remaining = requestedQuantity;
+  const allocations: Array<{
+    warehouse_id: number;
+    warehouse_name: string;
+    warehouse_code: string;
+    quantity: number;
+    shipping_weight: number;
+    is_primary?: boolean;
+  }> = [];
+
+  for (const b of breakdown) {
+    if (remaining <= 0) break;
+    if (b.available > 0) {
+      const take = Math.min(remaining, b.available);
+      allocations.push({
+        warehouse_id: b.warehouse_id,
+        warehouse_name: b.warehouse_name,
+        warehouse_code: b.warehouse_code,
+        quantity: take,
+        shipping_weight: b.shipping_weight,
+      });
+      remaining -= take;
+    }
+  }
+
+  const mode = remaining > 0 ? "backordered_split" : "multi_warehouse_split";
+  const explanation = remaining > 0
+    ? `Split with Backorder: No single warehouse had sufficient stock. Greedy allocation routed available units to the cheapest hubs, but ${remaining} unit${remaining > 1 ? "s" : ""} could not be fulfilled and will be backordered.`
+    : `Multi-Warehouse Split: No single warehouse possessed sufficient inventory for the entire order (${requestedQuantity} units). Greedy algorithm split the order across ${allocations.length} warehouses ordered by shipping cost weight.`;
+
+  return {
+    mode,
+    product_id: prod.id,
+    product_name: prod.name,
+    requested_quantity: requestedQuantity,
+    total_shipments: allocations.length,
+    backordered_quantity: remaining,
+    explanation,
+    allocations,
+    inventory_breakdown: breakdown,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════
 // BACKORDER CONSOLIDATION & RESTOCK CHECK (PRD B6)
 // ═══════════════════════════════════════════════════════════

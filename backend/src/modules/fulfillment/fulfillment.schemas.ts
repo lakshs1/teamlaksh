@@ -100,6 +100,13 @@ export const manualSplitOverrideSchema = z
   })
   .openapi("ManualSplitOverrideRequest");
 
+export const simulateAllocationSchema = z
+  .object({
+    product_id: z.coerce.number().int().positive("Product ID must be positive"),
+    quantity: z.coerce.number().int().positive("Quantity must be positive"),
+  })
+  .openapi("SimulateAllocationRequest");
+
 export const fulfillmentSplitItemSchema = z
   .object({
     quote_line_id: z.number().int(),

@@ -254,6 +254,10 @@ export const fulfillmentApi = {
     const res = await api.post(`/fulfillment/quotes/${quoteId}/backorders/simulate-restock`);
     return res.data;
   },
+  simulateAllocation: async (data: { product_id: number; quantity: number }) => {
+    const res = await api.post('/fulfillment/simulate-allocation', data);
+    return res.data;
+  },
 };
 
 // 8. Subscriptions & Invoicing API

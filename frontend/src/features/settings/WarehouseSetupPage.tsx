@@ -73,9 +73,10 @@ export default function WarehouseSetupPage() {
   const [replenishingMap, setReplenishingMap] = useState<Record<number, boolean>>({});
 
   // Simulator State
-  const [simQuantity, setSimQuantity] = useState<number>(25);
+  const [simQuantity, setSimQuantity] = useState<number>(50);
   const [simSelectedProductId, setSimSelectedProductId] = useState<number | null>(null);
   const [simResult, setSimResult] = useState<any | null>(null);
+  const [simulating, setSimulating] = useState<boolean>(false);
 
   // Fetch all warehouses
   const fetchWarehouses = async () => {
@@ -238,86 +239,23 @@ export default function WarehouseSetupPage() {
     }
   };
 
-  // Run Simulator
-  const handleRunSimulator = () => {
+  // Run Simulator with Real Multi-Warehouse Backend Allocation
+  const handleRunSimulator = async () => {
     if (!simSelectedProductId) {
       toast.error('Please select a product to simulate');
       return;
     }
-    const targetProduct = stocks.find((s) => s.product_id === simSelectedProductId);
-    const prodName = targetProduct?.product_name || `Product #${simSelectedProductId}`;
-
-    // Compute simulation based on active warehouses sorted by shippingCostWeight
-    const sortedWarehouses = [...warehouses]
-      .filter((w) => (w.isActive ?? w.is_active ?? true))
-      .sort((a, b) => {
-        const wa = Number(a.shippingCostWeight ?? a.shipping_cost_weight ?? 1);
-        const wb = Number(b.shippingCostWeight ?? b.shipping_cost_weight ?? 1);
-        return wa - wb;
+    try {
+      setSimulating(true);
+      const res = await fulfillmentApi.simulateAllocation({
+        product_id: simSelectedProductId,
+        quantity: simQuantity,
       });
-
-    // Find if single warehouse can fulfill 100% of order
-    let singleCapableWh: Warehouse | null = null;
-    let singleOnHand = 0;
-
-    for (const wh of sortedWarehouses) {
-      // In selected warehouse we have live stocks; for others we estimate
-      const onHand = wh.id === selectedWarehouseId ? (targetProduct?.available_quantity || 0) : 100;
-      if (onHand >= simQuantity) {
-        singleCapableWh = wh;
-        singleOnHand = onHand;
-        break;
-      }
-    }
-
-    if (singleCapableWh) {
-      const weight = Number(singleCapableWh.shippingCostWeight ?? singleCapableWh.shipping_cost_weight ?? 1);
-      setSimResult({
-        mode: 'single_shipment',
-        product_name: prodName,
-        requested_quantity: simQuantity,
-        total_shipments: 1,
-        explanation: 'Minimization Success: Fulfillable completely from a single warehouse. Lowest shipping cost weighting prioritized.',
-        allocations: [
-          {
-            warehouse_name: singleCapableWh.name,
-            warehouse_code: singleCapableWh.code || `WH-${singleCapableWh.id}`,
-            quantity: simQuantity,
-            shipping_weight: weight,
-            is_primary: true,
-          },
-        ],
-      });
-    } else {
-      // Multi-warehouse greedy split
-      let remaining = simQuantity;
-      const allocations: any[] = [];
-      for (const wh of sortedWarehouses) {
-        if (remaining <= 0) break;
-        const available = wh.id === selectedWarehouseId ? (targetProduct?.available_quantity || 0) : 15;
-        if (available > 0) {
-          const take = Math.min(available, remaining);
-          allocations.push({
-            warehouse_name: wh.name,
-            warehouse_code: wh.code || `WH-${wh.id}`,
-            quantity: take,
-            shipping_weight: Number(wh.shippingCostWeight ?? wh.shipping_cost_weight ?? 1),
-          });
-          remaining -= take;
-        }
-      }
-
-      setSimResult({
-        mode: remaining > 0 ? 'backordered_split' : 'multi_warehouse_split',
-        product_name: prodName,
-        requested_quantity: simQuantity,
-        total_shipments: allocations.length,
-        backordered_quantity: remaining > 0 ? remaining : 0,
-        explanation: remaining > 0
-          ? 'Split Required with Backorders: Multi-warehouse allocation utilized lowest-weight hubs first, but insufficient stock resulted in a backorder.'
-          : 'Multi-Warehouse Split: No single warehouse possessed sufficient inventory; greedy algorithm minimized total shipments using lowest shipping weights.',
-        allocations,
-      });
+      setSimResult(res.data);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || 'Simulation failed');
+    } finally {
+      setSimulating(false);
     }
   };
 
@@ -953,7 +891,7 @@ export default function WarehouseSetupPage() {
                 >
                   {stocks.map((s) => (
                     <option key={s.product_id} value={s.product_id}>
-                      {s.product_name} (Current Available: {s.available_quantity})
+                      {s.product_name} (Category: {s.category_name || 'General'})
                     </option>
                   ))}
                 </select>
@@ -993,16 +931,18 @@ export default function WarehouseSetupPage() {
 
               <button
                 type="button"
+                disabled={simulating}
                 onClick={handleRunSimulator}
                 className="odoo-btn odoo-btn-primary"
                 style={{
                   padding: '0.625rem 1.25rem',
                   fontWeight: 600,
                   fontSize: '0.875rem',
-                  cursor: 'pointer',
+                  cursor: simulating ? 'not-allowed' : 'pointer',
+                  opacity: simulating ? 0.7 : 1,
                 }}
               >
-                Simulate Warehouse Allocation
+                {simulating ? 'Simulating Real Allocation...' : 'Simulate Warehouse Allocation'}
               </button>
             </div>
           </div>
@@ -1116,6 +1056,61 @@ export default function WarehouseSetupPage() {
                     </table>
                   </div>
                 </div>
+
+                {/* Real Live Inventory Breakdown across all hubs */}
+                {simResult.inventory_breakdown && (
+                  <div>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#374151', marginBottom: '0.5rem' }}>
+                      Live Inventory Across All Distribution Centers
+                    </h3>
+                    <div className="odoo-table-container">
+                      <table className="odoo-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', textAlign: 'left' }}>
+                            <th style={{ padding: '0.65rem 0.85rem', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#4B5563' }}>Warehouse</th>
+                            <th style={{ padding: '0.65rem 0.85rem', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#4B5563' }}>Weight</th>
+                            <th style={{ padding: '0.65rem 0.85rem', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#4B5563' }}>On Hand</th>
+                            <th style={{ padding: '0.65rem 0.85rem', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#4B5563' }}>Reserved</th>
+                            <th style={{ padding: '0.65rem 0.85rem', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#4B5563' }}>Available</th>
+                            <th style={{ padding: '0.65rem 0.85rem', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#4B5563' }}>Single Shipment Capable?</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {simResult.inventory_breakdown.map((b: any) => (
+                            <tr key={b.warehouse_id} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                              <td style={{ padding: '0.65rem 0.85rem', fontWeight: 600, color: '#111827' }}>
+                                {b.warehouse_name} ({b.warehouse_code})
+                              </td>
+                              <td style={{ padding: '0.65rem 0.85rem', color: '#4B5563' }}>
+                                {b.shipping_weight.toFixed(2)}x
+                              </td>
+                              <td style={{ padding: '0.65rem 0.85rem', fontWeight: 600, color: '#111827' }}>
+                                {b.on_hand}
+                              </td>
+                              <td style={{ padding: '0.65rem 0.85rem', color: '#6B7280' }}>
+                                {b.reserved}
+                              </td>
+                              <td style={{ padding: '0.65rem 0.85rem', fontWeight: 700, color: b.available > 0 ? '#059669' : '#9CA3AF' }}>
+                                {b.available}
+                              </td>
+                              <td style={{ padding: '0.65rem 0.85rem' }}>
+                                {b.is_capable ? (
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 600, background: '#DCFCE7', color: '#15803D', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
+                                    Yes ({b.available} &gt;= {simResult.requested_quantity})
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '0.75rem', color: '#6B7280', background: '#F3F4F6', padding: '0.2rem 0.5rem', borderRadius: 4 }}>
+                                    No ({b.available} &lt; {simResult.requested_quantity})
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ padding: '3rem', textAlign: 'center', color: '#6B7280' }}>

@@ -9,6 +9,7 @@ import {
   getWarehouseStock,
   updateWarehouseStock,
   replenishWarehouseStock,
+  simulateProductAllocation,
   checkBackordersRestock,
   consolidateBackorders,
   simulateInboundRestock,
@@ -19,6 +20,7 @@ import {
   updateStockSchema,
   replenishStockSchema,
   manualSplitOverrideSchema,
+  simulateAllocationSchema,
 } from "./fulfillment.schemas.js";
 import { ApiError } from "../../lib/api-error.js";
 
@@ -122,6 +124,16 @@ export async function replenishWarehouseStockHandler(req: Request, res: Response
     const userId = (req as any).user?.id;
     const body = replenishStockSchema.parse(req.body);
     const data = await replenishWarehouseStock(warehouseId, body, userId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function simulateProductAllocationHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = simulateAllocationSchema.parse(req.body);
+    const data = await simulateProductAllocation(body.product_id, body.quantity);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);
