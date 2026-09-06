@@ -1,18 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { quoteApi, recommendationApi } from '../../services/apiServices';
+import { quoteApi, recommendationApi, portalApi } from '../../services/apiServices';
 import { mapQuote } from '../../services/dataMappers';
+import { useAuthStore } from '../../stores/authStore';
 import toast from 'react-hot-toast';
 
 export default function QuotationDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
 
   const [quote, setQuote] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [upsellSuggestions, setUpsellSuggestions] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'lines' | 'info'>('lines');
+  const [activeTab, setActiveTab] = useState<'lines' | 'negotiation' | 'audit' | 'info'>('lines');
   const [showUpsell, setShowUpsell] = useState(true);
+  const [replyMsg, setReplyMsg] = useState('');
+  const [submittingReply, setSubmittingReply] = useState(false);
+  const [submittingCounter, setSubmittingCounter] = useState(false);
 
   const fetchQuoteData = async () => {
     if (!id) return;
@@ -104,6 +109,56 @@ export default function QuotationDetailPage() {
     }
   };
 
+  const comments = quote.comments || [];
+  const auditLogs = quote.auditTrail || [];
+  const activeCounterOffer = comments.slice().reverse().find((c: any) => c.counterDiscountPct || c.counter_discount_pct);
+  const counterPct = activeCounterOffer ? Number(activeCounterOffer.counterDiscountPct || activeCounterOffer.counter_discount_pct) : 0;
+
+  const handleAcceptCounterOffer = async () => {
+    if (!activeCounterOffer || !quote) return;
+    setSubmittingCounter(true);
+    try {
+      for (const line of quote.lines) {
+        await quoteApi.updateLine(quote.id, line.id, { discount_pct: counterPct });
+      }
+      const token = quote.portalToken || quote.id;
+      try {
+        await portalApi.postComment(token, {
+          message: `Sales Representative accepted your proposed discount of ${counterPct}%. Quotation updated!`,
+          author_type: 'rep',
+          author_name: user?.name || 'Sales Rep',
+        });
+      } catch {}
+      toast.success(`Counter-offer accepted! All lines updated to ${counterPct}% discount.`);
+      await fetchQuoteData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to apply counter-discount');
+    } finally {
+      setSubmittingCounter(false);
+    }
+  };
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyMsg.trim() || !quote) return;
+    setSubmittingReply(true);
+    try {
+      const token = quote.portalToken || quote.id;
+      await portalApi.postComment(token, {
+        message: replyMsg.trim(),
+        author_type: 'rep',
+        author_name: user?.name || 'Sales Rep',
+      });
+      setReplyMsg('');
+      toast.success('Reply sent to customer portal!');
+      await fetchQuoteData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to send reply');
+    } finally {
+      setSubmittingReply(false);
+    }
+  };
+
   return (
     <div className="odoo-container">
       {/* Header bar */}
@@ -166,6 +221,49 @@ export default function QuotationDetailPage() {
       <div style={{ display: 'grid', gridTemplateColumns: showUpsell && upsellSuggestions.length > 0 ? '3fr 1fr' : '1fr', gap: '1.5rem' }}>
         {/* Main Quote Card */}
         <div className="odoo-card">
+          {/* Active Customer Counter-Offer Alert Banner */}
+          {activeCounterOffer && (
+            <div
+              style={{
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #F59E0B',
+                borderRadius: 8,
+                padding: '1rem 1.25rem',
+                marginBottom: '1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.75rem',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 800, color: '#92400E', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span>⚡</span> Customer Counter-Offer: {counterPct}% Discount Proposed
+                </div>
+                <div style={{ fontSize: '0.8125rem', color: '#B45309', marginTop: '0.25rem' }}>
+                  "{activeCounterOffer.message}" — Submitted by {activeCounterOffer.authorName || activeCounterOffer.author_name || 'Customer'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  className="odoo-btn odoo-btn-primary"
+                  onClick={handleAcceptCounterOffer}
+                  disabled={submittingCounter}
+                  style={{ backgroundColor: '#15803D', borderColor: '#15803D' }}
+                >
+                  {submittingCounter ? 'Applying...' : `✓ Accept ${counterPct}% Discount`}
+                </button>
+                <button
+                  className="odoo-btn odoo-btn-secondary"
+                  onClick={() => setActiveTab('negotiation')}
+                >
+                  💬 View Negotiation History
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Metadata Top Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #E2E8F0' }}>
             <div>
@@ -225,6 +323,62 @@ export default function QuotationDetailPage() {
               }}
             >
               Order Lines
+            </button>
+            <button
+              onClick={() => setActiveTab('negotiation')}
+              style={{
+                padding: '0.5rem 1rem',
+                fontWeight: 600,
+                color: activeTab === 'negotiation' ? '#714B67' : '#64748B',
+                borderBottom: activeTab === 'negotiation' ? '2px solid #714B67' : 'none',
+                marginBottom: -2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              Customer Negotiation
+              {comments.length > 0 && (
+                <span
+                  style={{
+                    backgroundColor: activeCounterOffer ? '#F59E0B' : '#714B67',
+                    color: '#FFF',
+                    fontSize: '0.7rem',
+                    borderRadius: 10,
+                    padding: '0.1rem 0.45rem',
+                  }}
+                >
+                  {comments.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('audit')}
+              style={{
+                padding: '0.5rem 1rem',
+                fontWeight: 600,
+                color: activeTab === 'audit' ? '#714B67' : '#64748B',
+                borderBottom: activeTab === 'audit' ? '2px solid #714B67' : 'none',
+                marginBottom: -2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              Audit Trail & History
+              {auditLogs.length > 0 && (
+                <span
+                  style={{
+                    backgroundColor: '#E2E8F0',
+                    color: '#475569',
+                    fontSize: '0.7rem',
+                    borderRadius: 10,
+                    padding: '0.1rem 0.45rem',
+                  }}
+                >
+                  {auditLogs.length}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('info')}
@@ -332,11 +486,156 @@ export default function QuotationDetailPage() {
                 </div>
               </div>
             </div>
+          ) : activeTab === 'negotiation' ? (
+            <div style={{ padding: '0.5rem 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937' }}>
+                    Customer Negotiation & Counter-Offers
+                  </h3>
+                  <p style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                    Direct communication with the customer from the Customer Portal magic link.
+                  </p>
+                </div>
+                {activeCounterOffer && (
+                  <button
+                    className="odoo-btn odoo-btn-primary"
+                    onClick={handleAcceptCounterOffer}
+                    disabled={submittingCounter}
+                    style={{ backgroundColor: '#15803D', borderColor: '#15803D', fontSize: '0.8125rem' }}
+                  >
+                    {submittingCounter ? 'Applying...' : `Accept ${counterPct}% Discount on All Lines`}
+                  </button>
+                )}
+              </div>
+
+              {/* Chat Thread */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+                maxHeight: 380,
+                overflowY: 'auto',
+                padding: '1rem',
+                backgroundColor: '#F8FAFC',
+                borderRadius: 8,
+                border: '1px solid #E2E8F0',
+                marginBottom: '1rem',
+              }}>
+                {comments.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: '0.8125rem', padding: '1.5rem' }}>
+                    No negotiation comments yet. Customers can counter-offer or question terms in their portal.
+                  </div>
+                )}
+                {comments.map((msg: any, idx: number) => {
+                  const isRep = msg.authorType === 'rep' || msg.author_type === 'rep';
+                  const hasCounter = msg.counterDiscountPct || msg.counter_discount_pct;
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        alignSelf: isRep ? 'flex-end' : 'flex-start',
+                        maxWidth: '80%',
+                        backgroundColor: isRep ? '#F5EEF4' : hasCounter ? '#FFFBEB' : '#FFFFFF',
+                        border: isRep ? '1px solid #E7D2E2' : hasCounter ? '1px solid #FCD34D' : '1px solid #E2E8F0',
+                        borderRadius: 8,
+                        padding: '0.75rem 1rem',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '0.25rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.75rem', color: isRep ? '#714B67' : hasCounter ? '#92400E' : '#334155' }}>
+                          {msg.authorName || msg.author_name || (isRep ? 'Sales Representative' : 'Customer')}
+                          {hasCounter && (
+                            <span style={{ marginLeft: '0.4rem', backgroundColor: '#F59E0B', color: '#FFF', padding: '0.1rem 0.35rem', borderRadius: 4, fontSize: '0.65rem' }}>
+                              Counter: {msg.counterDiscountPct || msg.counter_discount_pct}%
+                            </span>
+                          )}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: '#94A3B8' }}>
+                          {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.8125rem', color: '#1F2937', lineHeight: 1.4 }}>
+                        {msg.message}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Reply Form */}
+              <form onSubmit={handleSendReply} style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  className="odoo-input"
+                  placeholder="Type a message or counter-proposal to the customer..."
+                  value={replyMsg}
+                  onChange={(e) => setReplyMsg(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="submit"
+                  className="odoo-btn odoo-btn-primary"
+                  disabled={submittingReply || !replyMsg.trim()}
+                >
+                  {submittingReply ? 'Sending...' : 'Send Reply'}
+                </button>
+              </form>
+            </div>
+          ) : activeTab === 'audit' ? (
+            <div style={{ padding: '0.5rem 0' }}>
+              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '0.75rem' }}>
+                Quotation Audit History & Lifecycle Events
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                {auditLogs.map((log: any, idx: number) => (
+                  <div
+                    key={idx}
+                    style={{
+                      borderLeft: '3px solid #714B67',
+                      paddingLeft: '0.85rem',
+                      paddingTop: '0.2rem',
+                      paddingBottom: '0.2rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <span style={{ fontWeight: 700, color: '#1F2937', fontSize: '0.8125rem' }}>{log.step}</span>
+                      <span
+                        className="odoo-badge"
+                        style={{
+                          backgroundColor: log.status === 'Approved' ? '#DCFCE7' : log.status === 'Rejected' ? '#FEE2E2' : '#FEF3C7',
+                          color: log.status === 'Approved' ? '#15803D' : log.status === 'Rejected' ? '#B91C1C' : '#B45309',
+                          fontSize: '0.6875rem',
+                          padding: '0.1rem 0.4rem',
+                        }}
+                      >
+                        {log.status}
+                      </span>
+                    </div>
+                    <div style={{ color: '#64748B', fontSize: '0.75rem', marginTop: '0.15rem' }}>
+                      {log.user} • {log.timestamp}
+                    </div>
+                    {log.note && (
+                      <div style={{ marginTop: '0.3rem', color: '#475569', fontSize: '0.8125rem', backgroundColor: '#F8FAFC', padding: '0.4rem 0.6rem', borderRadius: 4 }}>
+                        "{log.note}"
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {auditLogs.length === 0 && (
+                  <div style={{ color: '#94A3B8', fontSize: '0.8125rem', padding: '1rem 0' }}>
+                    No audit logs recorded for this quotation yet.
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <div style={{ padding: '1rem', fontSize: '0.875rem', lineHeight: 1.6, color: '#475569' }}>
               <p><strong>Sales Representative:</strong> Maviya</p>
               <p><strong>Sales Team:</strong> Enterprise North</p>
               <p><strong>Fiscal Position:</strong> Standard B2B GST</p>
+              <p><strong>Portal Token:</strong> <code style={{ fontSize: '0.75rem', background: '#F1F5F9', padding: '0.15rem 0.4rem', borderRadius: 4 }}>{quote.portalToken || 'N/A'}</code></p>
             </div>
           )}
         </div>

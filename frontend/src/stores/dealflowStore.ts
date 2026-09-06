@@ -39,6 +39,16 @@ export interface Quotation {
   blendedRiskScore: number; // e.g. 18.5
   requiresManagerApproval: boolean;
   requiresFinanceApproval: boolean;
+  portalToken?: string;
+  comments?: any[];
+  approvalLogs?: any[];
+  auditTrail?: {
+    step: string;
+    user: string;
+    status: string;
+    timestamp: string;
+    note?: string;
+  }[];
 }
 
 export interface ApprovalItem {
@@ -85,6 +95,7 @@ export interface FulfillmentItem {
   customerName: string;
   scheduledDate: string;
   status: 'Draft' | 'Ready' | 'Picking' | 'Shipped' | 'Done' | 'Cancelled' | string;
+
   responsible: string;
   lines: {
     id?: number | string;

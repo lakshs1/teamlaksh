@@ -226,6 +226,17 @@ export async function addPortalComment(
     })
     .returning();
 
+  // Log counter-offer in quotation audit history
+  if (input.counter_discount_pct !== undefined && input.counter_discount_pct !== null) {
+    await db.insert(approvalLogs).values({
+      quoteId: quote.id,
+      reviewerId: quote.repId,
+      action: "counter_offer_received",
+      level: "rep",
+      reason: `Customer ${input.author_name || customer?.name || "Customer"} submitted counter-offer of ${input.counter_discount_pct}% discount: "${input.message}"`,
+    });
+  }
+
   return {
     id: comment.id,
     quote_id: comment.quoteId,

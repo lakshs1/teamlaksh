@@ -352,7 +352,24 @@ export async function getQuoteById(id: number) {
     .where(eq(portalComments.quoteId, id))
     .orderBy(asc(portalComments.createdAt));
 
-  return { ...row, lines, comments };
+  // Fetch audit and approval history
+  const logs = await db
+    .select({
+      id: approvalLogs.id,
+      quoteId: approvalLogs.quoteId,
+      reviewerId: approvalLogs.reviewerId,
+      action: approvalLogs.action,
+      level: approvalLogs.level,
+      reason: approvalLogs.reason,
+      createdAt: approvalLogs.createdAt,
+      reviewerName: users.name,
+    })
+    .from(approvalLogs)
+    .leftJoin(users, eq(approvalLogs.reviewerId, users.id))
+    .where(eq(approvalLogs.quoteId, id))
+    .orderBy(asc(approvalLogs.createdAt));
+
+  return { ...row, lines, comments, approvalLogs: logs };
 }
 
 export async function createQuote(

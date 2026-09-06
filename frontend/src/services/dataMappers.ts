@@ -81,6 +81,16 @@ export function mapQuote(q: any): Quotation {
     blendedRiskScore: num(q.blendedRiskScore),
     requiresManagerApproval: approvalRoute === 'manager' || approvalRoute === 'manager_finance',
     requiresFinanceApproval: approvalRoute === 'manager_finance',
+    portalToken: q.portalToken || q.portal_token || undefined,
+    comments: q.comments || [],
+    approvalLogs: q.approvalLogs || [],
+    auditTrail: (q.approvalLogs || []).map((log: any) => ({
+      step: log.level || log.step || 'Review',
+      user: log.reviewer?.name || log.reviewerName || log.user || 'System',
+      status: log.action === 'approved' ? 'Approved' : log.action === 'rejected' ? 'Rejected' : log.action || 'Logged',
+      timestamp: log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '',
+      note: log.reason || log.note || undefined,
+    })),
   };
 }
 
@@ -233,6 +243,7 @@ export function mapInvoice(inv: any): InvoiceItem {
     amount: num(inv.total),
     status,
     paymentTerms: inv.paymentTerms || 'Net 30',
+
     lines: (inv.lines || []).map((l: any) => ({
       productName: l.product?.name || l.productName || '',
       description: l.description || '',

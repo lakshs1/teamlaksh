@@ -75,39 +75,41 @@ export default function FulfillmentListPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredFulfillments.map((f) => (
-                <tr key={f.id}>
-                  <td><input type="checkbox" /></td>
-                  <td style={{ fontWeight: 700, color: '#714B67' }}>{f.reference}</td>
-                  <td style={{ fontWeight: 600 }}>{f.customerName}</td>
-                  <td>{f.scheduledDate}</td>
-                  <td>{f.responsible}</td>
-                  <td>
-                    <span
-                      className="odoo-badge"
-                      style={{
-                        backgroundColor:
-                          (f.status as string) === 'confirmed' || (f.status as string) === 'Done' ? '#DCFCE7' :
-                          (f.status as string) === 'approved' ? '#FEF3C7' : '#F1F5F9',
-                        color:
-                          (f.status as string) === 'confirmed' || (f.status as string) === 'Done' ? '#15803D' :
-                          (f.status as string) === 'approved' ? '#B45309' : '#475569',
-                      }}
-                    >
-                      {(f.status as string) === 'approved' ? 'Ready for Split' : (f.status as string) === 'confirmed' ? 'Dispatched' : f.status}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      className="odoo-btn odoo-btn-secondary"
-                      style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
-                      onClick={() => navigate(`/fulfillment/${f.id}`)}
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredFulfillments.map((f) => {
+                const isDispatched = String(f.status).toLowerCase() === 'confirmed' || String(f.status).toLowerCase() === 'done';
+                const isReady = String(f.status).toLowerCase() === 'approved';
+
+                return (
+                  <tr key={f.id}>
+                    <td><input type="checkbox" /></td>
+                    <td style={{ fontWeight: 700, color: '#714B67' }}>{f.reference}</td>
+                    <td style={{ fontWeight: 600 }}>{f.customerName}</td>
+                    <td>{f.scheduledDate}</td>
+                    <td>{f.responsible}</td>
+                    <td>
+                      <span
+                        className="odoo-badge"
+                        style={{
+                          backgroundColor: isDispatched ? '#DCFCE7' : isReady ? '#FEF3C7' : '#F1F5F9',
+                          color: isDispatched ? '#15803D' : isReady ? '#B45309' : '#475569',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {isReady ? 'Ready for Split' : isDispatched ? 'Dispatched' : f.status}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className="odoo-btn odoo-btn-secondary"
+                        style={{ padding: '0.2rem 0.6rem', fontSize: '0.75rem' }}
+                        onClick={() => navigate(`/fulfillment/${f.id}`)}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredFulfillments.length === 0 && (
                 <tr>
                   <td colSpan={7} style={{ textAlign: 'center', padding: '1rem' }}>No fulfillments found.</td>
