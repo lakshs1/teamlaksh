@@ -72,7 +72,7 @@ export const customers = pgTable("customers", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
-  tierId: integer("tier_id").references(() => customerTiers.id),
+  tierId: integer("tier_id").references(() => customerTiers.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -93,7 +93,7 @@ export const products = pgTable("products", {
   description: text("description"),
   categoryId: integer("category_id")
     .notNull()
-    .references(() => productCategories.id),
+    .references(() => productCategories.id, { onDelete: "cascade" }),
   basePrice: numeric("base_price", { precision: 12, scale: 2 }).notNull(),
   costPrice: numeric("cost_price", { precision: 12, scale: 2 }).notNull(), // Internal cost hidden from portal
   unit: varchar("unit", { length: 50 }).notNull().default("unit"), // unit, hour, license, month
@@ -118,7 +118,7 @@ export const productVariants = pgTable("product_variants", {
 export const priceLists = pgTable("price_lists", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
-  tierId: integer("tier_id").references(() => customerTiers.id),
+  tierId: integer("tier_id").references(() => customerTiers.id, { onDelete: "set null" }),
   currency: varchar("currency", { length: 10 }).notNull().default("USD"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -144,10 +144,10 @@ export const discountRules = pgTable("discount_rules", {
   id: serial("id").primaryKey(),
   tierId: integer("tier_id")
     .notNull()
-    .references(() => customerTiers.id),
+    .references(() => customerTiers.id, { onDelete: "cascade" }),
   categoryId: integer("category_id")
     .notNull()
-    .references(() => productCategories.id),
+    .references(() => productCategories.id, { onDelete: "cascade" }),
   maxDiscountPct: numeric("max_discount_pct", { precision: 5, scale: 2 }).notNull(),
   managerThresholdPct: numeric("manager_threshold_pct", { precision: 5, scale: 2 })
     .notNull()
