@@ -28,7 +28,7 @@ export default function QuotationDetailPage() {
       setLoading(true);
       const res = await quoteApi.getQuoteDetails(id);
       setQuote(mapQuote(res.data));
-      
+
       try {
         const recRes = await recommendationApi.getSuggestions(id);
         const suggestions = recRes.data?.items ?? recRes.data ?? [];
@@ -115,6 +115,8 @@ export default function QuotationDetailPage() {
 
   const comments = quote.comments || [];
   const auditLogs = quote.auditTrail || [];
+  const activeCounterOffer = comments.slice().reverse().find((c: any) => c.counterDiscountPct || c.counter_discount_pct);
+  const counterPct = activeCounterOffer ? Number(activeCounterOffer.counterDiscountPct || activeCounterOffer.counter_discount_pct) : 0;
 
   // Find latest counter proposal in comments
   const latestCounterComment = comments
@@ -174,6 +176,7 @@ export default function QuotationDetailPage() {
     if (!activeCounterOffer || !quote) return;
     setSubmittingCounter(true);
     try {
+      await quoteApi.acceptCounterOffer(quote.id, { discount_pct: counterPct });
       const res = await quoteApi.acceptCounterOffer(quote.id, { discount_pct: counterPct });
       const roleStr = String(user?.role || '').toLowerCase();
       const isMgr = roleStr.includes('manager') || roleStr.includes('admin');
@@ -260,18 +263,18 @@ export default function QuotationDetailPage() {
                   quote.status === 'Draft'
                     ? '#F1F5F9'
                     : quote.status === 'Approved'
-                    ? '#DCFCE7'
-                    : quote.status === 'Confirmed'
-                    ? '#E0E7FF'
-                    : '#FEF3C7',
+                      ? '#DCFCE7'
+                      : quote.status === 'Confirmed'
+                        ? '#E0E7FF'
+                        : '#FEF3C7',
                 color:
                   quote.status === 'Draft'
                     ? '#475569'
                     : quote.status === 'Approved'
-                    ? '#16A34A'
-                    : quote.status === 'Confirmed'
-                    ? '#4F46E5'
-                    : '#D97706',
+                      ? '#16A34A'
+                      : quote.status === 'Confirmed'
+                        ? '#4F46E5'
+                        : '#D97706',
                 fontWeight: 700,
                 fontSize: '0.8125rem',
                 padding: '0.25rem 0.6rem',
