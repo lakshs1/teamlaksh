@@ -32,6 +32,8 @@ export default function CustomerPortalPage() {
   const [isSending, setIsSending] = useState(false);
   const [showCounterModal, setShowCounterModal] = useState(false);
   const [counterDiscount, setCounterDiscount] = useState('10');
+  const [counterType, setCounterType] = useState<'customer' | 'rep'>('customer');
+  const [counterNote, setCounterNote] = useState('');
   const [liveQuote, setLiveQuote] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -46,12 +48,24 @@ export default function CustomerPortalPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const isStaff = Boolean(
+    user?.role &&
+    ['rep', 'sales rep', 'manager', 'sales manager', 'admin', 'finance', 'operations'].includes(user.role.toLowerCase())
+  );
+
   const customerName = user?.name || liveQuote?.customer_name || 'Customer Account';
   const customerEmail = user?.email || liveQuote?.customer_email || 'No registered email';
   const initial = customerName.charAt(0).toUpperCase();
 
   const quoteLines = liveQuote?.lines || liveQuote?.items || [];
   const displayMessages = localMessages.length > 0 ? localMessages : portalMessages;
+
+  const latestCounterMsg = displayMessages
+    .slice()
+    .reverse()
+    .find((m) => m.counterDiscountPct !== undefined && m.counterDiscountPct !== null && m.counterDiscountPct > 0);
+  const isLatestFromRep = latestCounterMsg?.authorType === 'rep' || latestCounterMsg?.sender === 'Sales Rep';
+  const isLatestFromCust = Boolean(latestCounterMsg && !isLatestFromRep);
 
   useEffect(() => {
     if (activeTab === 'quotation') {
@@ -183,6 +197,8 @@ export default function CustomerPortalPage() {
               senderName: c.author_name || (isCust ? 'Customer' : 'Sales Team'),
               timestamp: timeStr,
               text: c.message,
+              counterDiscountPct: c.counter_discount_pct !== undefined && c.counter_discount_pct !== null ? Number(c.counter_discount_pct) : null,
+              authorType: c.author_type || (isCust ? 'customer' : 'rep'),
             };
           });
 
@@ -241,18 +257,23 @@ export default function CustomerPortalPage() {
     setInputMsg('');
     setIsSending(true);
 
+    const isSenderRep = isStaff;
+    const senderRoleName = isSenderRep ? (user?.name || 'Sales Representative') : customerName;
+    const authorType = isSenderRep ? 'rep' : 'customer';
+
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const localNewMsg: PortalChatMessage = {
       id: `msg-${Date.now()}`,
-      sender: 'Customer',
-      senderName: customerName,
+      sender: isSenderRep ? 'Sales Rep' : 'Customer',
+      senderName: senderRoleName,
       timestamp: timeStr,
       text: newMsgText,
+      authorType,
     };
 
     const updated = [...localMessages, localNewMsg];
     setLocalMessages(updated);
-    addPortalMessage(newMsgText, 'Customer');
+    addPortalMessage(newMsgText, isSenderRep ? 'Sales Rep' : 'Customer');
 
     const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
     try {
@@ -262,8 +283,8 @@ export default function CustomerPortalPage() {
     try {
       await portalApi.postComment(tokenToUse, {
         message: newMsgText,
-        author_name: customerName,
-        author_type: 'customer',
+        author_name: senderRoleName,
+        author_type: authorType,
       });
       await loadQuoteData();
     } catch (err: any) {
@@ -277,8 +298,9 @@ export default function CustomerPortalPage() {
   const handleAcceptOffer = async () => {
     try {
       const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
-      await portalApi.confirmPortalQuote(tokenToUse);
-      toast.success('Quotation Accepted! Fulfillment and confirmation scheduled.');
+      const res = await portalApi.confirmPortalQuote(tokenToUse);
+      const discountNote = latestCounterMsg?.counterDiscountPct ? ` at ${latestCounterMsg.counterDiscountPct}% discount` : '';
+      toast.success(res?.message || `Quotation Accepted${discountNote}! Routed to warehouse fulfillment.`);
       await loadQuoteData();
     } catch (err: any) {
       console.error('Failed to confirm quote:', err);
@@ -298,31 +320,47 @@ export default function CustomerPortalPage() {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
 
+    const isRepCounter = counterType === 'rep' || isStaff;
+    const authorName = isRepCounter ? (user?.name || 'Sales Representative') : customerName;
+    const authorType = isRepCounter ? 'rep' : 'customer';
+    const messageText = counterNote.trim()
+      ? counterNote.trim()
+      : isRepCounter
+      ? `Sales Team counter-proposal: Offering ${counterVal}% discount on order lines.`
+      : `Counter-proposal submitted: Requesting ${counterVal}% discount on order lines.`;
+
     const counterProposalMsg: PortalChatMessage = {
       id: `msg-${Date.now()}`,
-      sender: 'Customer',
-      senderName: customerName,
+      sender: isRepCounter ? 'Sales Rep' : 'Customer',
+      senderName: authorName,
       timestamp: timeStr,
-      text: `Counter-proposal submitted: Requesting ${counterVal}% discount on order lines.`,
+      text: messageText,
+      counterDiscountPct: counterVal,
+      authorType,
     };
 
     const updatedWithCounter = [...localMessages, counterProposalMsg];
     setLocalMessages(updatedWithCounter);
-    addPortalMessage(counterProposalMsg.text, 'Customer');
+    addPortalMessage(counterProposalMsg.text, isRepCounter ? 'Sales Rep' : 'Customer');
 
     try {
       localStorage.setItem(`dealflow_portal_chat_${tokenToUse}`, JSON.stringify(updatedWithCounter));
     } catch {}
 
-    toast.success(`Counter proposal of ${counterVal}% discount submitted!`);
+    toast.success(
+      isRepCounter
+        ? `Sales counter-offer of ${counterVal}% proposed to customer!`
+        : `Counter proposal of ${counterVal}% discount submitted!`
+    );
 
     try {
       await portalApi.postComment(tokenToUse, {
-        message: `Counter-proposal submitted: Requesting ${counterVal}% discount on order lines.`,
+        message: messageText,
         counter_discount_pct: counterVal,
-        author_name: customerName,
-        author_type: 'customer',
+        author_name: authorName,
+        author_type: authorType,
       });
+      setCounterNote('');
       await loadQuoteData();
     } catch (err: any) {
       console.error('Failed to submit counter proposal:', err);
@@ -564,10 +602,197 @@ export default function CustomerPortalPage() {
               </div>
             </div>
           ) : (
-            /* Main Quotation Grid: Chat / Negotiation left, Summary right */
-            <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
-              {/* Left Chat / Messages & Line Items */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+              {/* 1. Staff Mode Banner: Rep / Manager accessing portal */}
+              {isStaff && (
+                <div
+                  style={{
+                    backgroundColor: '#EFF6FF',
+                    border: '1px solid #BFDBFE',
+                    borderRadius: 10,
+                    padding: '0.85rem 1.25rem',
+                    marginBottom: '1.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span style={{ fontSize: '1.2rem' }}>👁️</span>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#1E40AF', fontSize: '0.875rem' }}>
+                        Sales Team Portal Preview Mode ({user?.name || 'Sales Rep'} • {user?.role || 'Staff'})
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#3B82F6' }}>
+                        You are viewing the interactive customer portal. You can negotiate and propose counter-offers directly to the customer.
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      className="odoo-btn odoo-btn-primary"
+                      onClick={() => {
+                        setCounterType('rep');
+                        setCounterDiscount('5');
+                        setShowCounterModal(true);
+                      }}
+                      style={{ fontSize: '0.8125rem', padding: '0.4rem 0.85rem' }}
+                    >
+                      ⚡ Propose Counter-Offer to Customer
+                    </button>
+                    {liveQuote?.id && (
+                      <button
+                        className="odoo-btn odoo-btn-secondary"
+                        onClick={() => navigate(`/quotations/${liveQuote.id}`)}
+                        style={{ fontSize: '0.8125rem', padding: '0.4rem 0.85rem' }}
+                      >
+                        ← Back to Quotation Details
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Customer Action Banner: Sales Rep proposed a counter-offer */}
+              {!isStaff && isLatestFromRep && latestCounterMsg && (
+                <div
+                  style={{
+                    backgroundColor: '#F0FDF4',
+                    border: '1px solid #86EFAC',
+                    borderRadius: 10,
+                    padding: '1rem 1.25rem',
+                    marginBottom: '1.25rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span>🎉</span> Special Revised Offer: Sales Team Proposes {latestCounterMsg.counterDiscountPct}% Discount!
+                    </div>
+                    <div style={{ fontSize: '0.8125rem', color: '#15803D', marginTop: '0.25rem' }}>
+                      "{latestCounterMsg.text}"
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      className="odoo-btn odoo-btn-primary"
+                      onClick={handleAcceptOffer}
+                      style={{ backgroundColor: '#15803D', borderColor: '#15803D', fontWeight: 700 }}
+                    >
+                      ✓ Accept {latestCounterMsg.counterDiscountPct}% Offer & Proceed
+                    </button>
+                    <button
+                      className="odoo-btn odoo-btn-secondary"
+                      onClick={() => {
+                        setCounterType('customer');
+                        setCounterDiscount(String(latestCounterMsg.counterDiscountPct || 10));
+                        setShowCounterModal(true);
+                      }}
+                    >
+                      Counter Again
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Customer Status Notice: Counter-Offer Lifecycle */}
+              {!isStaff && isLatestFromCust && latestCounterMsg && (
+                liveQuote?.status === 'approved' ? (
+                  <div
+                    style={{
+                      backgroundColor: '#F0FDF4',
+                      border: '1px solid #86EFAC',
+                      borderRadius: 10,
+                      padding: '1rem 1.25rem',
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>✅</span> Counter-Offer Approved! Sales Team Accepted Your {latestCounterMsg.counterDiscountPct}% Discount
+                      </div>
+                      <div style={{ fontSize: '0.8125rem', color: '#15803D', marginTop: '0.25rem' }}>
+                        Your requested concession has been applied to this quotation. Accept below to proceed to order fulfillment.
+                      </div>
+                    </div>
+                    <button
+                      className="odoo-btn odoo-btn-primary"
+                      onClick={handleAcceptOffer}
+                      style={{ backgroundColor: '#15803D', borderColor: '#15803D', fontWeight: 700 }}
+                    >
+                      ✓ Accept Quotation Terms
+                    </button>
+                  </div>
+                ) : (liveQuote?.status === 'fulfillment' || liveQuote?.status === 'confirmed' || liveQuote?.status === 'invoiced') ? (
+                  <div
+                    style={{
+                      backgroundColor: '#EFF6FF',
+                      border: '1px solid #93C5FD',
+                      borderRadius: 10,
+                      padding: '0.85rem 1.25rem',
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>📦</span>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#1D4ED8', fontSize: '0.875rem' }}>
+                        Order Confirmed & In Fulfillment
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#2563EB' }}>
+                        This quotation terms were confirmed and converted into an active fulfillment order.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FCD34D',
+                      borderRadius: 10,
+                      padding: '0.85rem 1.25rem',
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.8125rem', color: '#92400E' }}>
+                      ⏳ Your counter-proposal requesting <strong>{latestCounterMsg.counterDiscountPct}% discount</strong> is currently pending review by your Sales Representative / Manager.
+                    </div>
+                    <button
+                      className="odoo-btn odoo-btn-secondary"
+                      onClick={() => {
+                        setCounterType('customer');
+                        setShowCounterModal(true);
+                      }}
+                      style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                    >
+                      Adjust Counter
+                    </button>
+                  </div>
+                )
+              )}
+
+              {/* Main Quotation Grid: Chat / Negotiation left, Summary right */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
+                {/* Left Chat / Messages & Line Items */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {/* Live Quotation Products Card */}
                 <div className="odoo-card">
                   <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '0.75rem' }}>
@@ -685,23 +910,33 @@ export default function CustomerPortalPage() {
                       </div>
                     ) : (
                       displayMessages.map((m) => {
-                        const isMe = m.sender === 'Customer';
+                        const isMe = isStaff
+                          ? (m.sender === 'Sales Rep' || m.authorType === 'rep')
+                          : (m.sender === 'Customer' || m.authorType === 'customer');
+                        const hasDiscount = m.counterDiscountPct !== undefined && m.counterDiscountPct !== null && m.counterDiscountPct > 0;
                         return (
                           <div
                             key={m.id}
                             style={{
                               alignSelf: isMe ? 'flex-end' : 'flex-start',
-                              maxWidth: '75%',
-                              backgroundColor: isMe ? '#714B67' : '#F1F5F9',
+                              maxWidth: '78%',
+                              backgroundColor: isMe ? '#714B67' : hasDiscount ? '#FFFBEB' : '#F1F5F9',
+                              border: hasDiscount ? '1px solid #FCD34D' : 'none',
                               color: isMe ? '#FFFFFF' : '#1F2937',
-                              padding: '0.6rem 0.85rem',
+                              padding: '0.65rem 0.9rem',
                               borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
                               fontSize: '0.8125rem',
                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                             }}
                           >
-                            <div style={{ fontSize: '0.7rem', opacity: 0.85, marginBottom: '0.2rem', fontWeight: 600 }}>
-                              {m.senderName} • {m.timestamp}
+                            <div style={{ fontSize: '0.7rem', opacity: isMe ? 0.9 : 0.75, marginBottom: '0.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                              <span>{m.senderName}</span>
+                              {hasDiscount && (
+                                <span style={{ backgroundColor: '#F59E0B', color: '#FFF', padding: '0.1rem 0.35rem', borderRadius: 4, fontSize: '0.65rem' }}>
+                                  Counter: {m.counterDiscountPct}%
+                                </span>
+                              )}
+                              <span>{m.timestamp}</span>
                             </div>
                             <div style={{ wordBreak: 'break-word', lineHeight: 1.4 }}>{m.text}</div>
                           </div>
@@ -716,7 +951,7 @@ export default function CustomerPortalPage() {
                     <input
                       type="text"
                       className="odoo-input"
-                      placeholder="Type a message or negotiation note..."
+                      placeholder={isStaff ? "Type a reply or counter note to customer..." : "Type a message or negotiation note..."}
                       value={inputMsg}
                       onChange={(e) => setInputMsg(e.target.value)}
                       disabled={isSending}
@@ -829,16 +1064,58 @@ export default function CustomerPortalPage() {
                   })()}
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <button className="odoo-btn odoo-btn-primary" onClick={handleAcceptOffer} style={{ cursor: 'pointer' }}>
-                      Accept Offer
-                    </button>
-                    <button className="odoo-btn odoo-btn-secondary" onClick={() => setShowCounterModal(true)} style={{ cursor: 'pointer' }}>
-                      Counter Offer
-                    </button>
+                    {isStaff ? (
+                      <>
+                        <button
+                          className="odoo-btn odoo-btn-primary"
+                          onClick={() => {
+                            setCounterType('rep');
+                            setCounterDiscount('5');
+                            setShowCounterModal(true);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          ⚡ Propose Sales Counter-Offer
+                        </button>
+                        {liveQuote?.id && (
+                          <button
+                            className="odoo-btn odoo-btn-secondary"
+                            onClick={() => navigate(`/quotations/${liveQuote.id}`)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            ← Back to Quotation Details
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="odoo-btn odoo-btn-primary"
+                          onClick={handleAcceptOffer}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {isLatestFromRep && latestCounterMsg
+                            ? `✓ Accept Sales Offer (${latestCounterMsg.counterDiscountPct}% Off)`
+                            : 'Accept Offer'}
+                        </button>
+                        <button
+                          className="odoo-btn odoo-btn-secondary"
+                          onClick={() => {
+                            setCounterType('customer');
+                            setCounterDiscount(String(latestCounterMsg?.counterDiscountPct || 10));
+                            setShowCounterModal(true);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          Counter Offer
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
+          </div>
           )}
         </>
       )}
@@ -1027,30 +1304,64 @@ export default function CustomerPortalPage() {
       {/* Counter offer modal */}
       {showCounterModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#FFF', padding: '1.5rem', borderRadius: 12, width: 400, maxWidth: '90%' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', color: '#1F2937' }}>
-              Submit Counter Offer
-            </h3>
+          <div style={{ background: '#FFF', padding: '1.5rem', borderRadius: 12, width: 440, maxWidth: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#1F2937' }}>
+                {counterType === 'rep' || isStaff ? '⚡ Propose Sales Counter-Offer' : 'Submit Counter Offer'}
+              </h3>
+              <button
+                onClick={() => setShowCounterModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748B' }}
+              >
+                ✕
+              </button>
+            </div>
+
             <div style={{ marginBottom: '1rem' }}>
               <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '0.4rem', color: '#475569' }}>
-                Requested Discount (%)
+                {counterType === 'rep' || isStaff ? 'Offered Counter Discount (%)' : 'Requested Discount (%)'}
               </label>
               <input
                 type="number"
+                min="0.5"
+                max="100"
+                step="0.5"
                 className="odoo-input"
                 value={counterDiscount}
                 onChange={(e) => setCounterDiscount(e.target.value)}
               />
             </div>
-            <p style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '1.25rem' }}>
-              Submitting a counter discount will automatically re-route this proposal through internal Sales Manager & Finance approvals.
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '0.4rem', color: '#475569' }}>
+                Negotiation Note / Reason (Optional)
+              </label>
+              <textarea
+                className="odoo-input"
+                rows={3}
+                placeholder={
+                  counterType === 'rep' || isStaff
+                    ? 'e.g., We can offer 5% enterprise concession if closed this quarter.'
+                    : 'e.g., Requesting 10% volume discount for annual commitment.'
+                }
+                value={counterNote}
+                onChange={(e) => setCounterNote(e.target.value)}
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            <p style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '1.25rem', lineHeight: 1.4 }}>
+              {counterType === 'rep' || isStaff
+                ? 'This counter-offer will be sent directly to the customer portal chat thread. If discount is within policy, status remains Approved; if it exceeds tier limits, it routes to the Sales Manager.'
+                : 'Submitting a counter discount will automatically re-route this proposal through internal Sales Manager & Finance approvals.'}
             </p>
+
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
               <button className="odoo-btn odoo-btn-secondary" onClick={() => setShowCounterModal(false)} style={{ cursor: 'pointer' }}>
                 Cancel
               </button>
               <button className="odoo-btn odoo-btn-primary" onClick={handleSendCounter} style={{ cursor: 'pointer' }}>
-                Submit Counter
+                {counterType === 'rep' || isStaff ? 'Send Sales Counter-Offer' : 'Submit Counter'}
               </button>
             </div>
           </div>

@@ -18,6 +18,9 @@ export default function QuotationDetailPage() {
   const [replyMsg, setReplyMsg] = useState('');
   const [submittingReply, setSubmittingReply] = useState(false);
   const [submittingCounter, setSubmittingCounter] = useState(false);
+  const [showRepCounterModal, setShowRepCounterModal] = useState(false);
+  const [repCounterDiscount, setRepCounterDiscount] = useState('5');
+  const [repCounterNote, setRepCounterNote] = useState('');
 
   const fetchQuoteData = async () => {
     if (!id) return;
@@ -57,9 +60,11 @@ export default function QuotationDetailPage() {
   const totalCost = quote.lines.reduce((acc: number, line: any) => acc + (line.unitPrice * 0.7) * line.quantity, 0);
   const marginPercent = totalRevenue > 0 ? Math.round(((totalRevenue - totalCost) / totalRevenue) * 100) : 35;
   const isDraft = quote.status === 'Draft';
+  const isLocked = ['Invoiced', 'Confirmed', 'Done', 'Cancelled'].includes(quote.status);
+  const canEdit = !isLocked;
 
   const handleQtyChange = async (lineId: string, currentQty: number, delta: number) => {
-    if (!isDraft) {
+    if (isLocked) {
       toast.error(`Cannot edit items on a quote with status '${quote.status}'`);
       return;
     }
@@ -74,7 +79,7 @@ export default function QuotationDetailPage() {
   };
 
   const handleDeleteLine = async (lineId: string) => {
-    if (!isDraft) {
+    if (isLocked) {
       toast.error(`Cannot delete items on a quote with status '${quote.status}'`);
       return;
     }
@@ -90,12 +95,11 @@ export default function QuotationDetailPage() {
   };
 
   const handleAddUpsellItem = async (productId: number | string, isUpsell: boolean = true) => {
-    if (!isDraft) {
+    if (isLocked) {
       toast.error(`Cannot add items to a quote with status '${quote.status}'`);
       return;
     }
     try {
-      // Need product id, we'll try to convert or fallback
       const pId = typeof productId === 'string' ? parseInt(productId.replace(/\D/g, '')) || 1 : productId;
       await quoteApi.addLine(quote.id, {
         product_id: pId,
@@ -111,25 +115,76 @@ export default function QuotationDetailPage() {
 
   const comments = quote.comments || [];
   const auditLogs = quote.auditTrail || [];
-  const activeCounterOffer = comments.slice().reverse().find((c: any) => c.counterDiscountPct || c.counter_discount_pct);
-  const counterPct = activeCounterOffer ? Number(activeCounterOffer.counterDiscountPct || activeCounterOffer.counter_discount_pct) : 0;
+
+  // Find latest counter proposal in comments
+  const latestCounterComment = comments
+    .slice()
+    .reverse()
+    .find((c: any) => (c.counterDiscountPct || c.counter_discount_pct) && Number(c.counterDiscountPct || c.counter_discount_pct) > 0);
+
+  const isFromCustomer = latestCounterComment && (
+    latestCounterComment.authorType === 'customer' ||
+    latestCounterComment.author_type === 'customer' ||
+    latestCounterComment.sender === 'Customer'
+  );
+
+  const counterPct = latestCounterComment ? Number(latestCounterComment.counterDiscountPct || latestCounterComment.counter_discount_pct) : 0;
+
+  // First principles check: Has this counter-offer already been accepted or resolved?
+  // 1. All quote lines already have this discount applied (within small precision epsilon)
+  const linesAlreadyDiscounted = quote.lines.length > 0 && quote.lines.every((l: any) => {
+    const lineDiscount = typeof l.discount === 'number' ? l.discount : parseFloat(l.discountPct || l.discount || '0');
+    return lineDiscount >= counterPct - 0.05;
+  });
+
+  // 2. An approval/acceptance log occurred after or at the time of the counter-proposal
+  const counterCommentTime = latestCounterComment?.createdAt ? new Date(latestCounterComment.createdAt).getTime() : 0;
+  const hasAcceptanceLogAfterCounter = (quote.approvalLogs || []).some((log: any) => {
+    const logTime = log.createdAt ? new Date(log.createdAt).getTime() : 0;
+    const isAcceptAction = log.action === 'approved' || log.action === 'counter_offer_accepted';
+    return isAcceptAction && (!counterCommentTime || logTime >= counterCommentTime - 1000);
+  });
+
+  // 3. Management or Rep posted an acceptance confirmation comment after this counter
+  const hasAcceptanceCommentAfter = comments.some((c: any) => {
+    const cTime = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+    const isStaffMsg = c.authorType === 'rep' || c.author_type === 'rep' || c.sender === 'Sales Rep';
+    const text = String(c.message || c.text || '').toLowerCase();
+    const isAcceptText = text.includes('accepted') && (text.includes('discount') || text.includes('approved'));
+    return isStaffMsg && isAcceptText && (!counterCommentTime || cTime >= counterCommentTime - 1000);
+  });
+
+  // 4. Quote is approved with lines discounted or in a post-negotiation status (fulfillment, confirmed, invoiced)
+  const isQuoteApprovedWithDiscount = (quote.status === 'Approved' || quote.status === 'approved') && linesAlreadyDiscounted;
+  const isPostNegotiationStatus = ['Confirmed', 'Invoiced', 'Fulfillment', 'confirmed', 'invoiced', 'fulfillment', 'done'].includes(quote.status);
+
+  const isCounterResolved =
+    linesAlreadyDiscounted ||
+    hasAcceptanceLogAfterCounter ||
+    hasAcceptanceCommentAfter ||
+    isQuoteApprovedWithDiscount ||
+    isPostNegotiationStatus;
+
+  // Active counter-offer exists ONLY if proposed by customer and not yet resolved
+  const activeCounterOffer = (quote.pendingCounterOffer !== undefined && quote.pendingCounterOffer === null)
+    ? null
+    : (quote.pendingCounterOffer || (isFromCustomer && !isCounterResolved ? latestCounterComment : null));
 
   const handleAcceptCounterOffer = async () => {
     if (!activeCounterOffer || !quote) return;
     setSubmittingCounter(true);
     try {
-      for (const line of quote.lines) {
-        await quoteApi.updateLine(quote.id, line.id, { discount_pct: counterPct });
+      const res = await quoteApi.acceptCounterOffer(quote.id, { discount_pct: counterPct });
+      const roleStr = String(user?.role || '').toLowerCase();
+      const isMgr = roleStr.includes('manager') || roleStr.includes('admin');
+      if (isMgr) {
+        toast.success(`Counter-offer accepted! Quotation re-approved with ${counterPct}% discount.`);
+      } else {
+        toast.success(`Counter-offer of ${counterPct}% accepted! Routed to Sales Manager for approval.`);
       }
-      const token = quote.portalToken || quote.id;
-      try {
-        await portalApi.postComment(token, {
-          message: `Sales Representative accepted your proposed discount of ${counterPct}%. Quotation updated!`,
-          author_type: 'rep',
-          author_name: user?.name || 'Sales Rep',
-        });
-      } catch {}
-      toast.success(`Counter-offer accepted! All lines updated to ${counterPct}% discount.`);
+      if (res?.data) {
+        setQuote(mapQuote(res.data));
+      }
       await fetchQuoteData();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || 'Failed to apply counter-discount');
@@ -156,6 +211,35 @@ export default function QuotationDetailPage() {
       toast.error(err?.response?.data?.message || 'Failed to send reply');
     } finally {
       setSubmittingReply(false);
+    }
+  };
+
+  const handleSendRepCounterOffer = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const discountVal = parseFloat(repCounterDiscount);
+    if (isNaN(discountVal) || discountVal <= 0 || discountVal > 100) {
+      toast.error('Please enter a valid counter discount percentage between 1 and 100.');
+      return;
+    }
+    if (!quote) return;
+    setSubmittingCounter(true);
+    try {
+      const token = quote.portalToken || quote.id;
+      const note = repCounterNote.trim() || `Sales Team proposed revised offer: ${discountVal}% discount on order lines.`;
+      await portalApi.postComment(token, {
+        message: note,
+        counter_discount_pct: discountVal,
+        author_type: 'rep',
+        author_name: user?.name || 'Sales Representative',
+      });
+      toast.success(`Counter-offer of ${discountVal}% sent to customer portal!`);
+      setShowRepCounterModal(false);
+      setRepCounterNote('');
+      await fetchQuoteData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to submit counter-offer');
+    } finally {
+      setSubmittingCounter(false);
     }
   };
 
@@ -245,7 +329,7 @@ export default function QuotationDetailPage() {
                   "{activeCounterOffer.message}" — Submitted by {activeCounterOffer.authorName || activeCounterOffer.author_name || 'Customer'}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <button
                   className="odoo-btn odoo-btn-primary"
                   onClick={handleAcceptCounterOffer}
@@ -253,6 +337,13 @@ export default function QuotationDetailPage() {
                   style={{ backgroundColor: '#15803D', borderColor: '#15803D' }}
                 >
                   {submittingCounter ? 'Applying...' : `✓ Accept ${counterPct}% Discount`}
+                </button>
+                <button
+                  className="odoo-btn odoo-btn-secondary"
+                  onClick={() => setShowRepCounterModal(true)}
+                  style={{ fontWeight: 600 }}
+                >
+                  ⚡ Propose Counter-Offer
                 </button>
                 <button
                   className="odoo-btn odoo-btn-secondary"
@@ -497,16 +588,25 @@ export default function QuotationDetailPage() {
                     Direct communication with the customer from the Customer Portal magic link.
                   </p>
                 </div>
-                {activeCounterOffer && (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                   <button
-                    className="odoo-btn odoo-btn-primary"
-                    onClick={handleAcceptCounterOffer}
-                    disabled={submittingCounter}
-                    style={{ backgroundColor: '#15803D', borderColor: '#15803D', fontSize: '0.8125rem' }}
+                    className="odoo-btn odoo-btn-secondary"
+                    onClick={() => setShowRepCounterModal(true)}
+                    style={{ fontSize: '0.8125rem', fontWeight: 600 }}
                   >
-                    {submittingCounter ? 'Applying...' : `Accept ${counterPct}% Discount on All Lines`}
+                    ⚡ Propose Counter-Offer
                   </button>
-                )}
+                  {activeCounterOffer && (
+                    <button
+                      className="odoo-btn odoo-btn-primary"
+                      onClick={handleAcceptCounterOffer}
+                      disabled={submittingCounter}
+                      style={{ backgroundColor: '#15803D', borderColor: '#15803D', fontSize: '0.8125rem' }}
+                    >
+                      {submittingCounter ? 'Applying...' : `Accept ${counterPct}% Discount on All Lines`}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Chat Thread */}
@@ -661,8 +761,7 @@ export default function QuotationDetailPage() {
             {upsellSuggestions.map((suggestion, idx) => (
               <div key={idx} style={{ border: '1px solid #E2E8F0', borderRadius: 8, padding: '0.75rem', backgroundColor: '#F8F9FA' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{suggestion.productName || suggestion.name}</span>
-                  {suggestion.is_promoted && <span className="odoo-badge">PROMO</span>}
+                  <span style={{ fontWeight: 700, fontSize: '0.8125rem' }}>{suggestion.product_name || suggestion.productName || suggestion.name}</span>
                 </div>
                 {suggestion.reason && (
                   <div style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '0.5rem' }}>
@@ -675,20 +774,81 @@ export default function QuotationDetailPage() {
                     width: '100%',
                     fontSize: '0.75rem',
                     padding: '0.3rem',
-                    opacity: isDraft ? 1 : 0.6,
-                    cursor: isDraft ? 'pointer' : 'not-allowed',
+                    opacity: canEdit ? 1 : 0.6,
+                    cursor: canEdit ? 'pointer' : 'not-allowed',
                   }}
-                  disabled={!isDraft}
-                  title={!isDraft ? `Cannot add items: Quotation is in '${quote.status}' status` : ''}
-                  onClick={() => handleAddUpsellItem(suggestion.suggested_product_id || suggestion.id, true)}
+                  disabled={!canEdit}
+                  title={!canEdit ? `Cannot add items: Quotation is in '${quote.status}' status` : ''}
+                  onClick={() => handleAddUpsellItem(suggestion.product_id || suggestion.suggested_product_id || suggestion.id, true)}
                 >
-                  {isDraft ? '+ Add to Quote' : `Locked (${quote.status})`}
+                  {canEdit ? '+ Add to Quote' : `Locked (${quote.status})`}
                 </button>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Propose Counter-Offer Modal */}
+      {showRepCounterModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#FFF', padding: '1.5rem', borderRadius: 12, width: 440, maxWidth: '90%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#1F2937' }}>
+                ⚡ Propose Sales Counter-Offer to Customer
+              </h3>
+              <button
+                onClick={() => setShowRepCounterModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748B' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '0.4rem', color: '#475569' }}>
+                Offered Counter Discount (%)
+              </label>
+              <input
+                type="number"
+                min="0.5"
+                max="100"
+                step="0.5"
+                className="odoo-input"
+                value={repCounterDiscount}
+                onChange={(e) => setRepCounterDiscount(e.target.value)}
+              />
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, marginBottom: '0.4rem', color: '#475569' }}>
+                Negotiation Note / Reason (Optional)
+              </label>
+              <textarea
+                className="odoo-input"
+                rows={3}
+                placeholder="e.g. We can offer a 5% discount if the order is confirmed this week."
+                value={repCounterNote}
+                onChange={(e) => setRepCounterNote(e.target.value)}
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            <p style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '1.25rem', lineHeight: 1.4 }}>
+              This proposal will be sent directly to the customer's portal chat thread. If within customer tier limits, status remains Approved; if exceeding tier limits, it routes to the Sales Manager.
+            </p>
+
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button className="odoo-btn odoo-btn-secondary" onClick={() => setShowRepCounterModal(false)} style={{ cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button className="odoo-btn odoo-btn-primary" onClick={handleSendRepCounterOffer} disabled={submittingCounter} style={{ cursor: 'pointer' }}>
+                {submittingCounter ? 'Submitting...' : 'Send Counter-Offer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

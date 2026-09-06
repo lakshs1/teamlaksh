@@ -10,31 +10,26 @@ import {
   deleteLineHandler,
   submitQuoteHandler,
   confirmQuoteHandler,
+  acceptCounterHandler,
 } from "./quotes.controller.js";
 
 const router = Router();
+const allStaffRoles = ["rep", "admin", "manager", "finance_operations", "finance", "operations"] as const;
 
 // ── Quote CRUD ────────────────────────────────────────────
 router.get("/", authenticate, listQuotesHandler);
-router.post("/", authenticate, authorize("rep", "admin", "manager"), createQuoteHandler);
-router.post("/", authenticate, authorize("rep", "admin", "manager", "finance_operations", "finance", "operations"), createQuoteHandler);
+router.post("/", authenticate, authorize(...allStaffRoles), createQuoteHandler);
 router.get("/:id", authenticate, getQuoteByIdHandler);
-router.patch("/:id", authenticate, authorize("rep", "admin", "manager"), updateQuoteHandler);
-router.patch("/:id", authenticate, authorize("rep", "admin", "manager", "finance_operations", "finance", "operations"), updateQuoteHandler);
+router.patch("/:id", authenticate, authorize(...allStaffRoles), updateQuoteHandler);
 
 // ── Line Management ───────────────────────────────────────
-router.post("/:id/lines", authenticate, authorize("rep", "admin", "manager"), addLineHandler);
-router.patch("/:id/lines/:lineId", authenticate, authorize("rep", "admin", "manager"), updateLineHandler);
-router.delete("/:id/lines/:lineId", authenticate, authorize("rep", "admin", "manager"), deleteLineHandler);
-router.post("/:id/lines", authenticate, authorize("rep", "admin", "manager", "finance_operations", "finance", "operations"), addLineHandler);
-router.patch("/:id/lines/:lineId", authenticate, authorize("rep", "admin", "manager", "finance_operations", "finance", "operations"), updateLineHandler);
-router.delete("/:id/lines/:lineId", authenticate, authorize("rep", "admin", "manager", "finance_operations", "finance", "operations"), deleteLineHandler);
+router.post("/:id/lines", authenticate, authorize(...allStaffRoles), addLineHandler);
+router.patch("/:id/lines/:lineId", authenticate, authorize(...allStaffRoles), updateLineHandler);
+router.delete("/:id/lines/:lineId", authenticate, authorize(...allStaffRoles), deleteLineHandler);
 
 // ── State Machine Actions ─────────────────────────────────
-router.post("/:id/submit", authenticate, authorize("rep", "admin", "manager"), submitQuoteHandler);
-router.post("/:id/confirm", authenticate, authorize("rep", "admin", "manager"), confirmQuoteHandler);
-router.post("/:id/submit", authenticate, authorize("rep", "admin", "manager", "finance_operations", "finance", "operations"), submitQuoteHandler);
-router.post("/:id/confirm", authenticate, authorize("rep", "admin", "manager", "finance_operations", "finance", "operations"), confirmQuoteHandler);
-
+router.post("/:id/submit", authenticate, authorize(...allStaffRoles), submitQuoteHandler);
+router.post("/:id/confirm", authenticate, authorize(...allStaffRoles), confirmQuoteHandler);
+router.post("/:id/accept-counter", authenticate, authorize(...allStaffRoles), acceptCounterHandler);
 
 export default router;

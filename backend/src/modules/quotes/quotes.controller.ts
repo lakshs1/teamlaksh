@@ -9,6 +9,7 @@ import {
   deleteLine,
   submitQuote,
   confirmQuote,
+  acceptCounterOffer,
 } from "./quotes.service.js";
 import {
   createQuoteSchema,
@@ -128,3 +129,16 @@ export async function confirmQuoteHandler(req: Request, res: Response, next: Nex
     next(err);
   }
 }
+
+export async function acceptCounterHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const quoteId = Number(req.params.id);
+    if (isNaN(quoteId)) throw ApiError.badRequest("Invalid quote ID");
+    const user = (req as any).user;
+    const result = await acceptCounterOffer(quoteId, user, req.body);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+

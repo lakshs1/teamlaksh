@@ -77,7 +77,7 @@ export default function FulfillmentListPage() {
             <tbody>
               {filteredFulfillments.map((f) => {
                 const isDispatched = String(f.status).toLowerCase() === 'confirmed' || String(f.status).toLowerCase() === 'done';
-                const isReady = String(f.status).toLowerCase() === 'approved';
+                const isReady = String(f.status).toLowerCase() === 'approved' || String(f.status).toLowerCase() === 'fulfillment';
 
                 return (
                   <tr key={f.id}>

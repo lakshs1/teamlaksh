@@ -217,13 +217,21 @@ export default function CreateQuotationPage() {
     name: string,
     price: number,
     cat: 'Hardware' | 'Services' | 'Subscriptions' | 'Accessories',
-    promoDesc: string
+    promoDesc: string,
+    realProductId?: string | number
   ) => {
     const allowed = getCategoryDiscountCeiling(cat, currentCustomer.tier);
     const cost = price * 0.55; // healthy margin on upsells
+    let prodId = realProductId ? String(realProductId) : '';
+    if (!prodId || prodId.startsWith('prod-upsell')) {
+      const matched = catalogProducts.find(
+        (p: any) => p.name.toLowerCase() === name.toLowerCase() || p.category === cat
+      );
+      prodId = matched ? String(matched.id) : (catalogProducts[0] ? String(catalogProducts[0].id) : '1');
+    }
     const newLine: QuotationLine = {
       id: `ql-upsell-${Date.now()}`,
-      productId: `prod-upsell-${Date.now()}`,
+      productId: prodId,
       productName: name,
       category: cat,
       description: promoDesc,
@@ -353,8 +361,16 @@ export default function CreateQuotationPage() {
       });
     }
 
-    return suggestions;
-  }, [lines]);
+    return suggestions.map((s, idx) => {
+      const match = catalogProducts.find(
+        (p: any) => p.name.toLowerCase() === s.name.toLowerCase() || p.category === s.category
+      ) || catalogProducts[idx % Math.max(1, catalogProducts.length)];
+      return {
+        ...s,
+        productId: match ? String(match.id) : (catalogProducts[0] ? String(catalogProducts[0].id) : '1'),
+      };
+    });
+  }, [lines, catalogProducts]);
 
   // Filtered catalog products for modal
   const filteredCatalog = useMemo(() => {
@@ -388,7 +404,13 @@ export default function CreateQuotationPage() {
       if (createRes?.data?.id) {
         const backendQuoteId = createRes.data.id;
         for (const line of lines) {
-          const numProdId = parseInt(String(line.productId).replace(/\D/g, '')) || 1;
+          let numProdId = parseInt(String(line.productId).replace(/\D/g, '')) || 0;
+          if (numProdId <= 0 || numProdId > 2147483647) {
+            const matched = catalogProducts.find(
+              (p: any) => p.name.toLowerCase() === line.productName.toLowerCase() || p.category === line.category
+            );
+            numProdId = matched ? parseInt(String(matched.id)) : (catalogProducts[0] ? parseInt(String(catalogProducts[0].id)) : 1);
+          }
           try {
             await quoteApi.addLine(backendQuoteId, {
               product_id: numProdId,
@@ -844,9 +866,10 @@ export default function CreateQuotationPage() {
                   type="button"
                   className="odoo-btn odoo-btn-secondary"
                   onClick={() => {
+                    const serviceProd = catalogProducts.find((p: any) => p.category === 'Services') || catalogProducts[0];
                     const customLine: QuotationLine = {
                       id: `ql-custom-${Date.now()}`,
-                      productId: 'prod-custom',
+                      productId: serviceProd ? String(serviceProd.id) : '1',
                       productName: 'Custom Solution Line',
                       category: 'Services',
                       description: 'Custom implementation or consultative line',
@@ -1057,7 +1080,7 @@ export default function CreateQuotationPage() {
                   type="button"
                   className="odoo-btn odoo-btn-primary"
                   style={{ width: '100%', fontSize: '0.75rem', padding: '0.35rem', marginTop: '0.3rem' }}
-                  onClick={() => handleAddUpsell(item.name, item.price, item.category, item.reason)}
+                  onClick={() => handleAddUpsell(item.name, item.price, item.category, item.reason, (item as any).productId)}
                 >
                   + Add to Quote
                 </button>

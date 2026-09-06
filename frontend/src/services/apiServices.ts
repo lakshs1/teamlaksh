@@ -150,6 +150,10 @@ export const quoteApi = {
     const res = await api.post(`/quotes/${quoteId}/confirm`);
     return res.data;
   },
+  acceptCounterOffer: async (quoteId: number | string, data?: { discount_pct?: number }) => {
+    const res = await api.post(`/quotes/${quoteId}/accept-counter`, data);
+    return res.data;
+  },
 };
 
 // 5. Approvals API

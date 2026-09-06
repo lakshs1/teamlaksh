@@ -226,15 +226,84 @@ export async function addPortalComment(
     })
     .returning();
 
-  // Log counter-offer in quotation audit history
-  if (input.counter_discount_pct !== undefined && input.counter_discount_pct !== null) {
+  // Log counter-offer in quotation audit history and re-route quote for review
+  // Log counter-offer in quotation audit history and update quote status
+  if (input.counter_discount_pct !== undefined && input.counter_discount_pct !== null && Number(input.counter_discount_pct) > 0) {
+    await db
+      .update(quotes)
+      .set({
+        status: "pending_manager",
+        approvalRoute: "manager",
+        updatedAt: new Date(),
+      })
+      .where(eq(quotes.id, quote.id));
+    const isRep = input.author_type === "rep";
+    const discount = Number(input.counter_discount_pct);
+
     await db.insert(approvalLogs).values({
       quoteId: quote.id,
       reviewerId: quote.repId,
       action: "counter_offer_received",
       level: "rep",
-      reason: `Customer ${input.author_name || customer?.name || "Customer"} submitted counter-offer of ${input.counter_discount_pct}% discount: "${input.message}"`,
+      reason: `Customer ${input.author_name || customer?.name || "Customer"} submitted counter-offer of ${input.counter_discount_pct}% discount: "${input.message}". Re-routed to Sales Manager for approval.`,
     });
+    let tierMax = 5;
+    if (customer?.tierId) {
+      const [tier] = await db.select().from(customerTiers).where(eq(customerTiers.id, customer.tierId)).limit(1);
+      if (tier) tierMax = Number(tier.maxDiscountPct);
+    }
+
+    let newStatus: string;
+    let approvalRoute: string;
+
+    if (isRep) {
+      // Sales Rep / Manager is proposing a counter-offer to the customer
+      if (discount <= tierMax) {
+        newStatus = "approved"; // Approved concession presented to customer
+        approvalRoute = "auto";
+      } else {
+        newStatus = "pending_manager"; // Exceeds tier max, requires manager approval
+        approvalRoute = "manager";
+      }
+
+      await db
+        .update(quotes)
+        .set({
+          status: newStatus,
+          approvalRoute,
+          updatedAt: new Date(),
+        })
+        .where(eq(quotes.id, quote.id));
+
+      await db.insert(approvalLogs).values({
+        quoteId: quote.id,
+        reviewerId: quote.repId,
+        action: "rep_counter_offer",
+        level: "rep",
+        reason: `Sales Team (${input.author_name || "Sales Rep"}) proposed counter-offer of ${discount}% discount to customer. Quote status: ${newStatus}.`,
+      });
+    } else {
+      // Customer is proposing a counter-offer
+      newStatus = "pending_manager";
+      approvalRoute = "manager";
+
+      await db
+        .update(quotes)
+        .set({
+          status: newStatus,
+          approvalRoute,
+          updatedAt: new Date(),
+        })
+        .where(eq(quotes.id, quote.id));
+
+      await db.insert(approvalLogs).values({
+        quoteId: quote.id,
+        reviewerId: quote.repId,
+        action: "counter_offer_received",
+        level: "rep",
+        reason: `Customer ${input.author_name || customer?.name || "Customer"} submitted counter-offer of ${discount}% discount: "${input.message}". Re-routed to Sales Manager for approval.`,
+      });
+    }
   }
 
   return {
@@ -279,9 +348,11 @@ export async function confirmPortalQuote(token: string) {
   let newStatus = "fulfillment";
   let approvalRoute = null;
   let message = "Thank you! Your quotation has been confirmed and submitted for processing.";
+  let appliedDiscountPct: number | null = null;
 
   if (latestCounter && Number(latestCounter.counterDiscountPct) > 0) {
     const counterPct = Number(latestCounter.counterDiscountPct);
+    const isRepOffer = latestCounter.authorType === "rep";
 
     // Get customer tier max allowed discount
     let tierMax = 10;
@@ -293,23 +364,93 @@ export async function confirmPortalQuote(token: string) {
         .limit(1);
       if (tier) tierMax = Number(tier.maxDiscountPct);
     }
-
-    if (counterPct > tierMax) {
-      // Counter-discount exceeds policy threshold -> route for manager review
+    if (!isRepOffer && counterPct > tierMax) {
+      // Customer's counter-discount exceeds policy threshold -> route for manager review
       newStatus = "pending_manager";
       approvalRoute = "manager";
       message = `Your proposed counter-discount of ${counterPct}% has been received and routed to sales management for approval.`;
+    } else {
+      // Approved offer or Rep's counter-offer accepted by customer -> apply discount and move to fulfillment!
+      appliedDiscountPct = counterPct;
+      newStatus = "fulfillment";
+      approvalRoute = null;
+      message = `Thank you! Quotation confirmed at ${counterPct}% discount and submitted to warehouse fulfillment.`;
     }
   }
+  // If discount was agreed and accepted, update all quote lines
+  if (appliedDiscountPct !== null && appliedDiscountPct >= 0) {
+    const lines = await db.select().from(quoteLines).where(eq(quoteLines.quoteId, quote.id));
+    for (const line of lines) {
+      const qty = line.quantity;
+      const unitPrice = parseFloat(line.unitPrice);
+      const costPrice = parseFloat(line.costPrice);
+      const allowedDiscountPct = parseFloat(line.allowedDiscountPct);
 
-  await db
-    .update(quotes)
-    .set({
-      status: newStatus,
-      approvalRoute: approvalRoute ?? quote.approvalRoute,
-      updatedAt: new Date(),
-    })
-    .where(eq(quotes.id, quote.id));
+      const discountAmount = unitPrice * qty * (appliedDiscountPct / 100);
+      const lineTotal = unitPrice * qty - discountAmount;
+      const marginPct = lineTotal > 0 ? ((lineTotal - costPrice * qty) / lineTotal) * 100 : 0;
+      const excessPct = Math.max(0, appliedDiscountPct - allowedDiscountPct);
+
+      await db
+        .update(quoteLines)
+        .set({
+          discountPct: appliedDiscountPct.toFixed(2),
+          discountAmount: discountAmount.toFixed(2),
+          lineTotal: lineTotal.toFixed(2),
+          marginPct: marginPct.toFixed(2),
+          excessPct: excessPct.toFixed(2),
+        })
+        .where(eq(quoteLines.id, line.id));
+    }
+
+    // Recalculate quote totals
+    let subtotal = 0;
+    let totalDiscount = 0;
+    let totalTax = 0;
+
+    const updatedLines = await db.select().from(quoteLines).where(eq(quoteLines.quoteId, quote.id));
+    for (const l of updatedLines) {
+      subtotal += parseFloat(l.unitPrice) * l.quantity;
+      totalDiscount += parseFloat(l.discountAmount);
+    }
+
+    const lineFull = await db
+      .select({
+        lineTotal: quoteLines.lineTotal,
+        taxPct: products.taxPct,
+      })
+      .from(quoteLines)
+      .leftJoin(products, eq(quoteLines.productId, products.id))
+      .where(eq(quoteLines.quoteId, quote.id));
+
+    for (const l of lineFull) {
+      totalTax += parseFloat(l.lineTotal) * (parseFloat(l.taxPct ?? "0") / 100);
+    }
+
+    const grandTotal = subtotal - totalDiscount + totalTax;
+
+    await db
+      .update(quotes)
+      .set({
+        subtotal: subtotal.toFixed(2),
+        totalDiscount: totalDiscount.toFixed(2),
+        totalTax: totalTax.toFixed(2),
+        grandTotal: Math.max(0, grandTotal).toFixed(2),
+        status: newStatus,
+        approvalRoute: approvalRoute ?? quote.approvalRoute,
+        updatedAt: new Date(),
+      })
+      .where(eq(quotes.id, quote.id));
+  } else {
+    await db
+      .update(quotes)
+      .set({
+        status: newStatus,
+        approvalRoute: approvalRoute ?? quote.approvalRoute,
+        updatedAt: new Date(),
+      })
+      .where(eq(quotes.id, quote.id));
+  }
 
   // Log in approval logs
   await db.insert(approvalLogs).values({
@@ -318,7 +459,11 @@ export async function confirmPortalQuote(token: string) {
     action: newStatus === "pending_manager" ? "counter_offer_submitted" : "customer_confirmed",
     level: "rep",
     reason: latestCounter
-      ? `Customer confirmed via portal with counter-offer of ${latestCounter.counterDiscountPct}%: "${latestCounter.message}"`
+      ? `Customer confirmed quotation via portal ${
+          latestCounter.authorType === "rep"
+            ? `accepting Sales Team counter-offer of ${latestCounter.counterDiscountPct}%`
+            : `with counter-offer of ${latestCounter.counterDiscountPct}%: "${latestCounter.message}"`
+        }`
       : "Customer confirmed and accepted quotation terms via portal magic link",
   });
 
@@ -335,7 +480,9 @@ export async function confirmPortalQuote(token: string) {
       quoteId: quote.id,
       authorType: "rep",
       authorName: "Operations & Fulfillment",
-      message: "Quotation officially confirmed and accepted! Converted to active order for fulfillment.",
+      message: appliedDiscountPct !== null
+        ? `Quotation officially confirmed and accepted at ${appliedDiscountPct}% discount! Converted to active order for fulfillment.`
+        : "Quotation officially confirmed and accepted! Converted to active order for fulfillment.",
     });
   }
 

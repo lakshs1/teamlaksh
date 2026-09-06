@@ -42,6 +42,7 @@ export interface Quotation {
   portalToken?: string;
   comments?: any[];
   approvalLogs?: any[];
+  pendingCounterOffer?: any | null;
   auditTrail?: {
     step: string;
     user: string;
@@ -194,6 +195,8 @@ export interface PortalChatMessage {
   senderName: string;
   timestamp: string;
   text: string;
+  counterDiscountPct?: number | null;
+  authorType?: string;
 }
 
 export type UserRole = 'Sales Rep' | 'Sales Manager' | 'Finance & Operations' | 'Finance' | 'Operations' | 'Admin';

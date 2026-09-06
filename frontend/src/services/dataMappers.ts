@@ -84,6 +84,7 @@ export function mapQuote(q: any): Quotation {
     portalToken: q.portalToken || q.portal_token || undefined,
     comments: q.comments || [],
     approvalLogs: q.approvalLogs || [],
+    pendingCounterOffer: q.pendingCounterOffer ?? null,
     auditTrail: (q.approvalLogs || []).map((log: any) => ({
       step: log.level || log.step || 'Review',
       user: log.reviewer?.name || log.reviewerName || log.user || 'System',

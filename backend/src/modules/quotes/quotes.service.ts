@@ -1,4 +1,4 @@
-import { eq, and, sql, desc, asc, inArray } from "drizzle-orm";
+import { eq, and, sql, desc, asc, inArray, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import {
   db,
@@ -370,6 +370,49 @@ export async function getQuoteById(id: number) {
     .orderBy(asc(approvalLogs.createdAt));
 
   return { ...row, lines, comments, approvalLogs: logs };
+  // Determine if there is an active / pending counter-offer from customer
+  let pendingCounterOffer: any = null;
+  const counterComments = comments.filter(
+    (c) => c.counterDiscountPct && parseFloat(c.counterDiscountPct) > 0
+  );
+
+  if (counterComments.length > 0) {
+    const latestCounter = counterComments[counterComments.length - 1];
+    const counterPct = parseFloat(latestCounter.counterDiscountPct || "0");
+    const isFromCustomer = latestCounter.authorType === "customer";
+
+    // First principles: check if counter-offer is already resolved
+    // 1. All quote lines already have this discount applied
+    const linesAlreadyDiscounted =
+      lines.length > 0 &&
+      lines.every((l) => parseFloat(l.discountPct) >= counterPct - 0.05);
+
+    // 2. An approval or counter acceptance log occurred after or at the time of the counter comment
+    const counterTime = new Date(latestCounter.createdAt).getTime();
+    const hasAcceptLog = logs.some((log) => {
+      const logTime = new Date(log.createdAt).getTime();
+      return (
+        (log.action === "approved" || log.action === "counter_offer_accepted") &&
+        logTime >= counterTime - 1000
+      );
+    });
+
+    // 3. Quote is in a post-negotiation status or approved with discount applied
+    const isPostNegotiation = ["fulfillment", "confirmed", "invoiced", "cancelled"].includes(row.status);
+    const isApprovedWithDiscount = row.status === "approved" && linesAlreadyDiscounted;
+
+    const isResolved =
+      linesAlreadyDiscounted ||
+      hasAcceptLog ||
+      isPostNegotiation ||
+      isApprovedWithDiscount;
+
+    if (isFromCustomer && !isResolved) {
+      pendingCounterOffer = latestCounter;
+    }
+  }
+
+  return { ...row, lines, comments, approvalLogs: logs, pendingCounterOffer };
 }
 
 export async function createQuote(
@@ -416,8 +459,9 @@ export async function updateQuote(
 ) {
   const quote = await getQuoteOrThrow(id);
 
-  if (quote.status !== "draft") {
-    throw ApiError.badRequest(`Cannot update a quote with status '${quote.status}'. Only draft quotes can be edited.`);
+  const lockedStatuses = ["invoiced", "confirmed", "cancelled"];
+  if (lockedStatuses.includes(quote.status)) {
+    throw ApiError.badRequest(`Cannot update a quote with status '${quote.status}'.`);
   }
 
   await db
@@ -447,8 +491,15 @@ export async function addLine(
   }
 ) {
   const quote = await getQuoteOrThrow(quoteId);
-  if (quote.status !== "draft") {
+  const lockedStatuses = ["invoiced", "confirmed", "cancelled"];
+  if (lockedStatuses.includes(quote.status)) {
     throw ApiError.badRequest(`Cannot add lines to a quote with status '${quote.status}'`);
+  }
+
+  // Validate product_id is a valid positive 32-bit integer
+  const prodId = Number(data.product_id);
+  if (isNaN(prodId) || prodId <= 0 || prodId > 2147483647) {
+    throw ApiError.badRequest(`Invalid product ID: ${data.product_id}`);
   }
 
   // Fetch product with category
@@ -464,7 +515,7 @@ export async function addLine(
     })
     .from(products)
     .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
-    .where(eq(products.id, data.product_id))
+    .where(eq(products.id, prodId))
     .limit(1);
 
   if (!productRow) throw ApiError.notFound(`Product ID ${data.product_id} not found`);
@@ -557,7 +608,8 @@ export async function updateLine(
   data: { quantity?: number; discount_pct?: number }
 ) {
   const quote = await getQuoteOrThrow(quoteId);
-  if (quote.status !== "draft") {
+  const lockedStatuses = ["invoiced", "confirmed", "cancelled"];
+  if (lockedStatuses.includes(quote.status)) {
     throw ApiError.badRequest(`Cannot edit lines on a quote with status '${quote.status}'`);
   }
 
@@ -599,7 +651,8 @@ export async function updateLine(
 
 export async function deleteLine(quoteId: number, lineId: number, repId: number) {
   const quote = await getQuoteOrThrow(quoteId);
-  if (quote.status !== "draft") {
+  const lockedStatuses = ["invoiced", "confirmed", "cancelled"];
+  if (lockedStatuses.includes(quote.status)) {
     throw ApiError.badRequest(`Cannot delete lines from a quote with status '${quote.status}'`);
   }
 
@@ -735,3 +788,138 @@ export async function confirmQuote(quoteId: number, repId: number) {
 
   return getQuoteById(quoteId);
 }
+
+// ═══════════════════════════════════════════════════════════
+// STATE MACHINE — ACCEPT COUNTER-OFFER / RENEGOTIATE
+// ═══════════════════════════════════════════════════════════
+
+export async function acceptCounterOffer(
+  quoteId: number,
+  reviewer: { id: number; role: string; name?: string },
+  data?: { discount_pct?: number; comment?: string }
+) {
+  const quote = await getQuoteOrThrow(quoteId);
+  const lockedStatuses = ["invoiced", "confirmed", "cancelled"];
+  if (lockedStatuses.includes(quote.status)) {
+    throw ApiError.badRequest(`Cannot modify a quote with status '${quote.status}'`);
+  }
+
+  // Determine counter discount percentage
+  let discountPct = data?.discount_pct;
+  if (discountPct === undefined) {
+    const [latestCounter] = await db
+      .select()
+      .from(portalComments)
+      .where(and(eq(portalComments.quoteId, quoteId), isNotNull(portalComments.counterDiscountPct)))
+      .orderBy(desc(portalComments.createdAt))
+      .limit(1);
+
+    if (latestCounter && latestCounter.counterDiscountPct) {
+      discountPct = parseFloat(latestCounter.counterDiscountPct);
+    } else {
+      discountPct = 0;
+    }
+  }
+
+  // Apply discount to all lines
+  const lines = await db.select().from(quoteLines).where(eq(quoteLines.quoteId, quoteId));
+  for (const line of lines) {
+    const qty = line.quantity;
+    const unitPrice = parseFloat(line.unitPrice);
+    const costPrice = parseFloat(line.costPrice);
+    const allowedDiscountPct = parseFloat(line.allowedDiscountPct);
+
+    const discountAmount = unitPrice * qty * (discountPct / 100);
+    const lineTotal = unitPrice * qty - discountAmount;
+    const marginPct = lineTotal > 0 ? ((lineTotal - costPrice * qty) / lineTotal) * 100 : 0;
+    const excessPct = Math.max(0, discountPct - allowedDiscountPct);
+
+    await db
+      .update(quoteLines)
+      .set({
+        discountPct: discountPct.toFixed(2),
+        discountAmount: discountAmount.toFixed(2),
+        lineTotal: lineTotal.toFixed(2),
+        marginPct: marginPct.toFixed(2),
+        excessPct: excessPct.toFixed(2),
+      })
+      .where(eq(quoteLines.id, line.id));
+  }
+
+  await recalculateQuoteTotals(quoteId);
+
+  // Role authority determination
+  const isManagerOrAdmin = reviewer.role === "manager" || reviewer.role === "admin";
+  let newStatus: string;
+  let approvalRoute: string | null = quote.approvalRoute;
+
+  if (isManagerOrAdmin) {
+    // Sales Manager or Admin directly accepts and approves
+    newStatus = "approved";
+    approvalRoute = "manager";
+  } else {
+    // Sales Rep accepts: evaluate if it exceeds customer tier limit
+    let tierMax = 5;
+    if (quote.customerId) {
+      const [customerRow] = await db
+        .select({ tierId: customers.tierId })
+        .from(customers)
+        .where(eq(customers.id, quote.customerId))
+        .limit(1);
+
+      if (customerRow?.tierId) {
+        const [tier] = await db.select().from(customerTiers).where(eq(customerTiers.id, customerRow.tierId)).limit(1);
+        if (tier) tierMax = parseFloat(tier.maxDiscountPct);
+      }
+    }
+
+    if (discountPct > tierMax) {
+      newStatus = "pending_manager";
+      approvalRoute = "manager";
+    } else {
+      newStatus = "approved";
+      approvalRoute = "auto";
+    }
+  }
+
+  await db
+    .update(quotes)
+    .set({
+      status: newStatus,
+      approvalRoute,
+      updatedAt: new Date(),
+    })
+    .where(eq(quotes.id, quoteId));
+
+  // Log in audit trail
+  await db.insert(approvalLogs).values({
+    quoteId,
+    reviewerId: reviewer.id,
+    action: newStatus === "approved" ? "approved" : "counter_offer_accepted",
+    level: reviewer.role === "manager" ? "manager" : reviewer.role === "admin" ? "admin" : "rep",
+    reason: isManagerOrAdmin
+      ? `Sales Manager accepted customer counter-offer of ${discountPct}% discount and re-approved quotation.`
+      : `Sales Rep accepted customer counter-offer of ${discountPct}% discount. ${
+          newStatus === "pending_manager"
+            ? "Exceeds tier maximum; routed to Sales Manager for approval."
+            : "Within allowed tier limit; auto-approved."
+        }`,
+  });
+
+  // Post update to customer portal comments
+  await db.insert(portalComments).values({
+    quoteId,
+    authorType: "rep",
+    authorName: reviewer.name || (isManagerOrAdmin ? "Sales Management" : "Sales Representative"),
+    message: isManagerOrAdmin
+      ? `Sales Management accepted your proposed discount of ${discountPct}%. Quotation is fully approved!`
+      : `Sales Representative accepted your proposed discount of ${discountPct}%. ${
+          newStatus === "pending_manager"
+            ? "Submitted to Sales Manager for review."
+            : "Quotation approved!"
+        }`,
+  });
+
+  return getQuoteById(quoteId);
+}
+
