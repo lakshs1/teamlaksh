@@ -10,6 +10,10 @@
     "db:push": "npm --prefix db run db:push",
     "seed:demo": "npm --prefix backend run seed:demo",
     "dev:backend": "npm --prefix backend run dev",
-    "dev:frontend": "npm --prefix frontend run dev"
+    "dev:frontend": "npm --prefix frontend run dev",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:db": "docker compose up -d postgres",
+    "docker:logs": "docker compose logs -f"
   }
 }

@@ -4,6 +4,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+
+# Pass API URL at build time (Vite embeds env vars into static bundle)
+ARG VITE_API_URL=http://localhost:5000/api/v1
+ENV VITE_API_URL=$VITE_API_URL
+
 RUN npm run build
 
 # ---- Stage 2: Serve with nginx ----
