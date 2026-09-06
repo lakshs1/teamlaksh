@@ -1,15 +1,20 @@
+
 import { eq, and, inArray, sql, desc, asc } from "drizzle-orm";
 import {
   db,
   quotes,
   quoteLines,
   products,
+  productCategories,
   warehouses,
   warehouseStock,
   fulfillmentSplits,
   backorders,
   stockMovements,
   approvalLogs,
+  invoices,
+  subscriptions,
+  billingSchedules,
 } from "@db";
 import { ApiError } from "../../lib/api-error.js";
 
@@ -35,11 +40,29 @@ export interface BackorderItem {
   quantity_backordered: number;
 }
 
+export interface WarehouseSummarySplit {
+  warehouse_id: number;
+  warehouse_name: string;
+  quantity_fulfilled: number;
+  stock_available: number;
+  shipment_count: number;
+  estimated_cost: number;
+  shipping_cost_weight?: number;
+  items: Array<{
+    quote_line_id: number;
+    product_id: number;
+    product_name: string;
+    quantity: number;
+  }>;
+}
+
 export interface SplitRecommendationResult {
   quote_id: number;
   splits: SplitItem[];
+  warehouse_splits: WarehouseSummarySplit[];
   backordered: BackorderItem[];
   total_shipments: number;
+  total_estimated_shipping_cost: number;
   can_fulfill_completely: boolean;
 }
 
@@ -77,8 +100,10 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
     return {
       quote_id: quoteId,
       splits: [],
+      warehouse_splits: [],
       backordered: [],
       total_shipments: 0,
+      total_estimated_shipping_cost: 0,
       can_fulfill_completely: true,
     };
   }
@@ -89,8 +114,10 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
     return {
       quote_id: quoteId,
       splits: [],
+      warehouse_splits: [],
       backordered: [],
       total_shipments: 0,
+      total_estimated_shipping_cost: 0,
       can_fulfill_completely: true,
     };
   }
@@ -132,42 +159,80 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
   const splits: SplitItem[] = [];
   const backordered: BackorderItem[] = [];
 
-  for (const line of physicalLines) {
-    let remainingQty = line.quantity;
-    const prod = productMap.get(line.productId);
-    const prodName = prod ? prod.name : `Product #${line.productId}`;
-
-    for (const wh of activeWarehouses) {
+  // Shipment minimization check:
+  // If any single warehouse can fulfill 100% of order lines, select it to achieve 1 single shipment.
+  // activeWarehouses is sorted by shippingCostWeight ASC, so the cheapest capable warehouse is chosen.
+  let singleCapableWarehouse: (typeof activeWarehouses)[0] | null = null;
+  for (const wh of activeWarehouses) {
+    const canFulfillAll = physicalLines.every((line) => {
       const stockKey = `${wh.id}_${line.productId}_${line.variantId ?? "null"}`;
       const available = stockAvailableMap.get(stockKey) || 0;
-
-      if (available > 0) {
-        const take = Math.min(remainingQty, available);
-        splits.push({
-          quote_line_id: line.id,
-          product_id: line.productId,
-          product_name: prodName,
-          variant_id: line.variantId ?? null,
-          warehouse_id: wh.id,
-          warehouse_name: wh.name,
-          quantity: take,
-          is_backordered: false,
-        });
-
-        remainingQty -= take;
-        stockAvailableMap.set(stockKey, available - take);
-
-        if (remainingQty === 0) break;
-      }
+      return available >= line.quantity;
+    });
+    if (canFulfillAll) {
+      singleCapableWarehouse = wh;
+      break;
     }
+  }
 
-    if (remainingQty > 0) {
-      backordered.push({
+  if (singleCapableWarehouse) {
+    // Single shipment fulfillment
+    for (const line of physicalLines) {
+      const prod = productMap.get(line.productId);
+      const prodName = prod ? prod.name : `Product #${line.productId}`;
+      splits.push({
         quote_line_id: line.id,
         product_id: line.productId,
         product_name: prodName,
-        quantity_backordered: remainingQty,
+        variant_id: line.variantId ?? null,
+        warehouse_id: singleCapableWarehouse.id,
+        warehouse_name: singleCapableWarehouse.name,
+        quantity: line.quantity,
+        is_backordered: false,
       });
+      const stockKey = `${singleCapableWarehouse.id}_${line.productId}_${line.variantId ?? "null"}`;
+      const available = stockAvailableMap.get(stockKey) || 0;
+      stockAvailableMap.set(stockKey, available - line.quantity);
+    }
+  } else {
+    // Multi-warehouse greedy allocation
+    for (const line of physicalLines) {
+      let remainingQty = line.quantity;
+      const prod = productMap.get(line.productId);
+      const prodName = prod ? prod.name : `Product #${line.productId}`;
+
+      for (const wh of activeWarehouses) {
+        const stockKey = `${wh.id}_${line.productId}_${line.variantId ?? "null"}`;
+        const available = stockAvailableMap.get(stockKey) || 0;
+
+        if (available > 0) {
+          const take = Math.min(remainingQty, available);
+          splits.push({
+            quote_line_id: line.id,
+            product_id: line.productId,
+            product_name: prodName,
+            variant_id: line.variantId ?? null,
+            warehouse_id: wh.id,
+            warehouse_name: wh.name,
+            quantity: take,
+            is_backordered: false,
+          });
+
+          remainingQty -= take;
+          stockAvailableMap.set(stockKey, available - take);
+
+          if (remainingQty === 0) break;
+        }
+      }
+
+      if (remainingQty > 0) {
+        backordered.push({
+          quote_line_id: line.id,
+          product_id: line.productId,
+          product_name: prodName,
+          quantity_backordered: remainingQty,
+        });
+      }
     }
   }
 
@@ -175,11 +240,50 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
   const total_shipments = uniqueWarehouses.size;
   const can_fulfill_completely = backordered.length === 0;
 
+  // Build warehouse summaries with calculated shipping cost and item details
+  const warehouse_splits: WarehouseSummarySplit[] = [];
+  let totalOrderShippingCost = 0;
+
+  for (const wh of activeWarehouses) {
+    const whSplits = splits.filter((s) => s.warehouse_id === wh.id);
+    if (whSplits.length === 0) continue;
+
+    const totalQty = whSplits.reduce((acc, s) => acc + s.quantity, 0);
+    const weight = Number(wh.shippingCostWeight) || 1.0;
+    // Base shipment rate ₹1,200 weighted by warehouse distance factor and package quantity
+    const estimatedCost = Math.round(1200 * weight + totalQty * 25);
+    totalOrderShippingCost += estimatedCost;
+
+    // Total available stock in warehouse
+    let whStockTotal = 0;
+    for (const [key, qty] of stockAvailableMap.entries()) {
+      if (key.startsWith(`${wh.id}_`)) whStockTotal += qty;
+    }
+
+    warehouse_splits.push({
+      warehouse_id: wh.id,
+      warehouse_name: wh.name,
+      quantity_fulfilled: totalQty,
+      stock_available: whStockTotal + totalQty,
+      shipment_count: 1,
+      estimated_cost: estimatedCost,
+      shipping_cost_weight: weight,
+      items: whSplits.map((s) => ({
+        quote_line_id: s.quote_line_id,
+        product_id: s.product_id,
+        product_name: s.product_name,
+        quantity: s.quantity,
+      })),
+    });
+  }
+
   return {
     quote_id: quoteId,
     splits,
+    warehouse_splits,
     backordered,
     total_shipments,
+    total_estimated_shipping_cost: totalOrderShippingCost,
     can_fulfill_completely,
   };
 }
@@ -265,10 +369,110 @@ export async function acceptWarehouseSplit(quoteId: number, userId: number) {
     reason: `Fulfillment split accepted: ${recommendation.splits.length} allocations, ${recommendation.backordered.length} backordered lines`,
   });
 
+  // 4. Update quote status to confirmed & ready for billing
+  await db
+    .update(quotes)
+    .set({ status: "confirmed", updatedAt: new Date() })
+    .where(eq(quotes.id, quoteId));
+
+  // 5. Ensure invoice and subscriptions are generated
+  const inv = await ensureOrderInvoicedAndSubscribed(quoteId);
+
   return {
     ...recommendation,
-    message: `Fulfillment accepted with ${recommendation.splits.length} allocations across ${recommendation.total_shipments} warehouse(s).`,
+    invoice_number: inv?.invoiceNumber,
+    message: `Fulfillment accepted & dispatched. Invoice ${inv?.invoiceNumber || ''} generated successfully!`,
   };
+}
+
+async function ensureOrderInvoicedAndSubscribed(quoteId: number) {
+  const [quote] = await db.select().from(quotes).where(eq(quotes.id, quoteId)).limit(1);
+  if (!quote) return null;
+
+  const lines = await db.select().from(quoteLines).where(eq(quoteLines.quoteId, quoteId));
+  const hasRecurring = lines.some((l) => l.isRecurring);
+
+  let generatedInvoice: any = null;
+  const existingInvoices = await db.select().from(invoices).where(eq(invoices.quoteId, quoteId)).limit(1);
+  if (existingInvoices.length === 0) {
+    const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(invoices);
+    const count = Number(countResult?.count || 0);
+    const year = new Date().getFullYear();
+    const seq = String(count + 1).padStart(4, "0");
+    const invoiceNumber = `INV-${year}-${seq}`;
+
+    const [inv] = await db
+      .insert(invoices)
+      .values({
+        invoiceNumber,
+        quoteId,
+        customerId: quote.customerId,
+        type: hasRecurring ? "recurring" : "one_time",
+        subtotal: quote.subtotal,
+        tax: quote.totalTax,
+        total: quote.grandTotal,
+        status: "sent",
+        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      })
+      .returning();
+    generatedInvoice = inv;
+  } else {
+    generatedInvoice = existingInvoices[0];
+  }
+
+  // Generate subscriptions for recurring lines
+  for (const line of lines) {
+    if (line.isRecurring) {
+      const existingSub = await db
+        .select()
+        .from(subscriptions)
+        .where(and(eq(subscriptions.quoteId, quoteId), eq(subscriptions.quoteLineId, line.id)))
+        .limit(1);
+
+      if (!existingSub || existingSub.length === 0) {
+        const now = new Date();
+        const nextMonth = new Date(now.getTime());
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+        const [sub] = await db
+          .insert(subscriptions)
+          .values({
+            quoteId,
+            quoteLineId: line.id,
+            customerId: quote.customerId,
+            productId: line.productId,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            interval: "monthly",
+            status: "active",
+            startsAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: nextMonth,
+          })
+          .returning();
+
+        const perPeriodAmount = (line.quantity * Number(line.unitPrice)).toFixed(2);
+        const scheduleRows = [];
+        for (let i = 0; i < 12; i++) {
+          const pStart = new Date(now.getTime());
+          pStart.setMonth(pStart.getMonth() + i);
+          const pEnd = new Date(now.getTime());
+          pEnd.setMonth(pEnd.getMonth() + i + 1);
+
+          scheduleRows.push({
+            subscriptionId: sub.id,
+            periodStart: pStart,
+            periodEnd: pEnd,
+            amount: perPeriodAmount,
+            status: "upcoming",
+          });
+        }
+        await db.insert(billingSchedules).values(scheduleRows);
+      }
+    }
+  }
+
+  return generatedInvoice;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -387,11 +591,21 @@ export async function overrideWarehouseSplit(
     reason: `Manual fulfillment override with ${committedSplits.length} allocations and ${committedBackorders.length} backorders`,
   });
 
+  // Update quote status to confirmed & ready for billing
+  await db
+    .update(quotes)
+    .set({ status: "confirmed", updatedAt: new Date() })
+    .where(eq(quotes.id, quoteId));
+
+  // Ensure invoice and subscriptions are generated
+  const inv = await ensureOrderInvoicedAndSubscribed(quoteId);
+
   return {
     quote_id: quoteId,
     splits: committedSplits,
     backordered: committedBackorders,
-    message: "Manual split override applied successfully",
+    invoice_number: inv?.invoiceNumber,
+    message: `Manual split override applied! Order confirmed and invoice ${inv?.invoiceNumber || ''} generated.`,
   };
 }
 
@@ -441,37 +655,106 @@ export async function createWarehouse(data: {
   };
 }
 
+export async function updateWarehouse(
+  warehouseId: number,
+  data: {
+    name?: string;
+    code?: string;
+    location?: string;
+    shipping_cost_weight?: number;
+    is_active?: boolean;
+  }
+) {
+  const [existing] = await db.select().from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1);
+  if (!existing) {
+    throw ApiError.notFound(`Warehouse with ID ${warehouseId} not found`);
+  }
+
+  const updates: Record<string, any> = { updatedAt: new Date() };
+  if (data.name !== undefined) updates.name = data.name;
+  if (data.code !== undefined) updates.code = data.code;
+  if (data.location !== undefined) updates.location = data.location;
+  if (data.shipping_cost_weight !== undefined) {
+    updates.shippingCostWeight = Number(data.shipping_cost_weight).toFixed(2);
+  }
+  if (data.is_active !== undefined) updates.isActive = data.is_active;
+
+  const [updated] = await db
+    .update(warehouses)
+    .set(updates)
+    .where(eq(warehouses.id, warehouseId))
+    .returning();
+
+  return {
+    id: updated.id,
+    name: updated.name,
+    code: updated.code,
+    location: updated.location,
+    shipping_cost_weight: Number(updated.shippingCostWeight),
+    is_active: updated.isActive,
+    created_at: updated.createdAt,
+  };
+}
+
 export async function getWarehouseStock(warehouseId: number) {
   const [wh] = await db.select().from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1);
   if (!wh) {
     throw ApiError.notFound(`Warehouse with ID ${warehouseId} not found`);
   }
 
+  // Fetch all active products joined with category names
+  const allProducts = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      unit: products.unit,
+      basePrice: products.basePrice,
+      categoryId: products.categoryId,
+      categoryName: productCategories.name,
+    })
+    .from(products)
+    .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .where(eq(products.isActive, true))
+    .orderBy(products.name);
+
+  // Fetch existing warehouse stock records
   const stockList = await db
     .select()
     .from(warehouseStock)
     .where(eq(warehouseStock.warehouseId, warehouseId));
 
-  if (stockList.length === 0) return [];
+  const stockMap = new Map(stockList.map((s) => [s.productId, s]));
 
-  const prodIds = Array.from(new Set(stockList.map((s) => s.productId)));
-  const prodRows = await db.select().from(products).where(inArray(products.id, prodIds));
-  const prodMap = new Map(prodRows.map((p) => [p.id, p]));
+  return allProducts.map((prod) => {
+    const s = stockMap.get(prod.id);
+    const qtyOnHand = s ? s.quantityOnHand : 0;
+    const qtyReserved = s ? s.quantityReserved : 0;
+    const reorderLvl = s ? s.reorderLevel : 10;
+    const reorderQty = s ? s.reorderQuantity : 50;
+    const available = Math.max(0, qtyOnHand - qtyReserved);
 
-  return stockList.map((s) => {
-    const prod = prodMap.get(s.productId);
-    const available = Math.max(0, s.quantityOnHand - s.quantityReserved);
+    let status: "in_stock" | "low_stock" | "out_of_stock" = "in_stock";
+    if (qtyOnHand === 0) {
+      status = "out_of_stock";
+    } else if (qtyOnHand <= reorderLvl) {
+      status = "low_stock";
+    }
 
     return {
-      id: s.id,
-      warehouse_id: s.warehouseId,
-      product_id: s.productId,
-      variant_id: s.variantId,
-      quantity_on_hand: s.quantityOnHand,
-      quantity_reserved: s.quantityReserved,
+      id: s?.id ?? 0,
+      warehouse_id: warehouseId,
+      product_id: prod.id,
+      variant_id: s?.variantId ?? null,
+      quantity_on_hand: qtyOnHand,
+      quantity_reserved: qtyReserved,
       available_quantity: available,
-      reorder_level: s.reorderLevel,
-      product_name: prod ? prod.name : undefined,
+      reorder_level: reorderLvl,
+      reorder_quantity: reorderQty,
+      stock_status: status,
+      product_name: prod.name,
+      category_name: prod.categoryName || "General",
+      unit: prod.unit || "unit",
+      base_price: Number(prod.basePrice || 0),
       warehouse_name: wh.name,
     };
   });
@@ -482,9 +765,10 @@ export async function updateWarehouseStock(
   data: {
     product_id: number;
     variant_id?: number;
-    quantity: number;
+    quantity?: number;
     reorder_level?: number;
     reorder_quantity?: number;
+    notes?: string;
   },
   userId?: number
 ) {
@@ -507,15 +791,15 @@ export async function updateWarehouseStock(
     .limit(1);
 
   let updatedRecord;
-  let delta = data.quantity;
+  const targetQty = data.quantity !== undefined ? data.quantity : (existing ? existing.quantityOnHand : 0);
+  const delta = existing ? targetQty - existing.quantityOnHand : targetQty;
 
   if (existing) {
-    delta = data.quantity - existing.quantityOnHand;
     const [updated] = await db
       .update(warehouseStock)
       .set({
-        quantity: data.quantity,
-        quantityOnHand: data.quantity,
+        quantity: targetQty,
+        quantityOnHand: targetQty,
         variantId: data.variant_id ?? existing.variantId,
         reorderLevel: data.reorder_level ?? existing.reorderLevel,
         reorderQuantity: data.reorder_quantity ?? existing.reorderQuantity,
@@ -531,8 +815,8 @@ export async function updateWarehouseStock(
         warehouseId,
         productId: data.product_id,
         variantId: data.variant_id ?? null,
-        quantity: data.quantity,
-        quantityOnHand: data.quantity,
+        quantity: targetQty,
+        quantityOnHand: targetQty,
         quantityReserved: 0,
         reorderLevel: data.reorder_level ?? 10,
         reorderQuantity: data.reorder_quantity ?? 50,
@@ -551,11 +835,16 @@ export async function updateWarehouseStock(
       movementType: delta > 0 ? "restock" : "adjustment",
       referenceId: `WH-${warehouseId}`,
       performedBy: userId ?? null,
-      notes: "Stock quantity adjustment",
+      notes: data.notes || "Stock level & replenishment rule adjustment",
     });
   }
 
   const available = Math.max(0, updatedRecord.quantityOnHand - updatedRecord.quantityReserved);
+  const status = updatedRecord.quantityOnHand === 0
+    ? "out_of_stock"
+    : updatedRecord.quantityOnHand <= updatedRecord.reorderLevel
+      ? "low_stock"
+      : "in_stock";
 
   return {
     id: updatedRecord.id,
@@ -566,7 +855,486 @@ export async function updateWarehouseStock(
     quantity_reserved: updatedRecord.quantityReserved,
     available_quantity: available,
     reorder_level: updatedRecord.reorderLevel,
+    reorder_quantity: updatedRecord.reorderQuantity,
+    stock_status: status,
     product_name: prod.name,
     warehouse_name: wh.name,
   };
 }
+
+export async function replenishWarehouseStock(
+  warehouseId: number,
+  data: {
+    product_id: number;
+    variant_id?: number;
+    quantity?: number;
+    notes?: string;
+  },
+  userId?: number
+) {
+  const [wh] = await db.select().from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1);
+  if (!wh) throw ApiError.notFound(`Warehouse with ID ${warehouseId} not found`);
+
+  const [prod] = await db.select().from(products).where(eq(products.id, data.product_id)).limit(1);
+  if (!prod) throw ApiError.notFound(`Product with ID ${data.product_id} not found`);
+
+  const [existing] = await db
+    .select()
+    .from(warehouseStock)
+    .where(
+      and(
+        eq(warehouseStock.warehouseId, warehouseId),
+        eq(warehouseStock.productId, data.product_id)
+      )
+    )
+    .limit(1);
+
+  const replenishQty = data.quantity && data.quantity > 0 ? data.quantity : (existing?.reorderQuantity || 50);
+
+  let updatedRecord;
+  if (existing) {
+    const newQty = existing.quantityOnHand + replenishQty;
+    const [updated] = await db
+      .update(warehouseStock)
+      .set({
+        quantity: newQty,
+        quantityOnHand: newQty,
+        updatedAt: new Date(),
+      })
+      .where(eq(warehouseStock.id, existing.id))
+      .returning();
+    updatedRecord = updated;
+  } else {
+    const [inserted] = await db
+      .insert(warehouseStock)
+      .values({
+        warehouseId,
+        productId: data.product_id,
+        variantId: data.variant_id ?? null,
+        quantity: replenishQty,
+        quantityOnHand: replenishQty,
+        quantityReserved: 0,
+        reorderLevel: 10,
+        reorderQuantity: 50,
+      })
+      .returning();
+    updatedRecord = inserted;
+  }
+
+  await db.insert(stockMovements).values({
+    warehouseId,
+    productId: data.product_id,
+    variantId: data.variant_id ?? null,
+    quantityChange: replenishQty,
+    movementType: "restock",
+    referenceId: `REPLENISH-WH${warehouseId}`,
+    performedBy: userId ?? null,
+    notes: data.notes || `Replenishment rule executed: +${replenishQty} units added`,
+  });
+
+  const available = Math.max(0, updatedRecord.quantityOnHand - updatedRecord.quantityReserved);
+  const status = updatedRecord.quantityOnHand === 0
+    ? "out_of_stock"
+    : updatedRecord.quantityOnHand <= updatedRecord.reorderLevel
+      ? "low_stock"
+      : "in_stock";
+
+  return {
+    id: updatedRecord.id,
+    warehouse_id: updatedRecord.warehouseId,
+    product_id: updatedRecord.productId,
+    variant_id: updatedRecord.variantId,
+    quantity_on_hand: updatedRecord.quantityOnHand,
+    quantity_reserved: updatedRecord.quantityReserved,
+    available_quantity: available,
+    reorder_level: updatedRecord.reorderLevel,
+    reorder_quantity: updatedRecord.reorderQuantity,
+    stock_status: status,
+    product_name: prod.name,
+    warehouse_name: wh.name,
+    replenished_by: replenishQty,
+  };
+}
+
+export async function simulateProductAllocation(productId: number, requestedQuantity: number) {
+  const [prod] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  if (!prod) throw ApiError.notFound(`Product with ID ${productId} not found`);
+
+  // Fetch all active warehouses ordered by shipping_cost_weight ASC
+  const activeWarehouses = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight));
+
+  if (activeWarehouses.length === 0) {
+    throw ApiError.badRequest("No active warehouses found for simulation");
+  }
+
+  // Fetch stock rows for this product across all warehouses
+  const stockRows = await db
+    .select()
+    .from(warehouseStock)
+    .where(eq(warehouseStock.productId, productId));
+
+  const stockMap = new Map(stockRows.map((s) => [s.warehouseId, s]));
+
+  // Build warehouse breakdown
+  const breakdown = activeWarehouses.map((wh) => {
+    const s = stockMap.get(wh.id);
+    const onHand = s ? s.quantityOnHand : 0;
+    const reserved = s ? s.quantityReserved : 0;
+    const available = Math.max(0, onHand - reserved);
+    const weight = Number(wh.shippingCostWeight || 1.0);
+    return {
+      warehouse_id: wh.id,
+      warehouse_name: wh.name,
+      warehouse_code: wh.code || `WH-${wh.id}`,
+      location: wh.location || "-",
+      shipping_weight: weight,
+      on_hand: onHand,
+      reserved,
+      available,
+      is_capable: available >= requestedQuantity,
+    };
+  });
+
+  // Step 1: Single-warehouse priority check (ADR-004 shipment minimization)
+  // activeWarehouses is already ordered by shippingCostWeight ASC
+  const singleCapable = breakdown.find((b) => b.available >= requestedQuantity);
+
+  if (singleCapable) {
+    return {
+      mode: "single_shipment",
+      product_id: prod.id,
+      product_name: prod.name,
+      requested_quantity: requestedQuantity,
+      total_shipments: 1,
+      backordered_quantity: 0,
+      explanation: `Minimization Success: Single shipment fulfilled completely by ${singleCapable.warehouse_name} (${singleCapable.warehouse_code}). Prioritized by lowest shipping cost weight (${singleCapable.shipping_weight.toFixed(2)}x) among capable hubs.`,
+      allocations: [
+        {
+          warehouse_id: singleCapable.warehouse_id,
+          warehouse_name: singleCapable.warehouse_name,
+          warehouse_code: singleCapable.warehouse_code,
+          quantity: requestedQuantity,
+          shipping_weight: singleCapable.shipping_weight,
+          is_primary: true,
+        },
+      ],
+      inventory_breakdown: breakdown,
+    };
+  }
+
+  // Step 2: Multi-warehouse greedy split
+  let remaining = requestedQuantity;
+  const allocations: Array<{
+    warehouse_id: number;
+    warehouse_name: string;
+    warehouse_code: string;
+    quantity: number;
+    shipping_weight: number;
+    is_primary?: boolean;
+  }> = [];
+
+  for (const b of breakdown) {
+    if (remaining <= 0) break;
+    if (b.available > 0) {
+      const take = Math.min(remaining, b.available);
+      allocations.push({
+        warehouse_id: b.warehouse_id,
+        warehouse_name: b.warehouse_name,
+        warehouse_code: b.warehouse_code,
+        quantity: take,
+        shipping_weight: b.shipping_weight,
+      });
+      remaining -= take;
+    }
+  }
+
+  const mode = remaining > 0 ? "backordered_split" : "multi_warehouse_split";
+  const explanation = remaining > 0
+    ? `Split with Backorder: No single warehouse had sufficient stock. Greedy allocation routed available units to the cheapest hubs, but ${remaining} unit${remaining > 1 ? "s" : ""} could not be fulfilled and will be backordered.`
+    : `Multi-Warehouse Split: No single warehouse possessed sufficient inventory for the entire order (${requestedQuantity} units). Greedy algorithm split the order across ${allocations.length} warehouses ordered by shipping cost weight.`;
+
+  return {
+    mode,
+    product_id: prod.id,
+    product_name: prod.name,
+    requested_quantity: requestedQuantity,
+    total_shipments: allocations.length,
+    backordered_quantity: remaining,
+    explanation,
+    allocations,
+    inventory_breakdown: breakdown,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// BACKORDER CONSOLIDATION & RESTOCK CHECK (PRD B6)
+// ═══════════════════════════════════════════════════════════
+
+export async function checkBackordersRestock(quoteId: number) {
+  // 1. Fetch quote
+  await getQuoteOrThrow(quoteId);
+
+  // 2. Fetch open backorders for quote
+  const openBackorders = await db
+    .select()
+    .from(backorders)
+    .where(and(eq(backorders.quoteId, quoteId), eq(backorders.status, "open")));
+
+  if (openBackorders.length === 0) {
+    return {
+      has_new_stock: false,
+      can_consolidate: false,
+      backorders: [],
+      restocked_items: [],
+      message: "No open backorders for this order.",
+    };
+  }
+
+  const productIds = Array.from(new Set(openBackorders.map((b) => b.productId)));
+  const productRows = await db.select().from(products).where(inArray(products.id, productIds));
+  const productMap = new Map(productRows.map((p) => [p.id, p]));
+
+  // 3. Check live available stock across active warehouses
+  const stockRows = await db
+    .select()
+    .from(warehouseStock)
+    .where(inArray(warehouseStock.productId, productIds));
+
+  const activeWhs = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight));
+
+  const restockedItems: Array<{
+    backorder_id: number;
+    quote_line_id: number;
+    product_id: number;
+    product_name: string;
+    quantity_backordered: number;
+    quantity_available_now: number;
+    preferred_warehouse_id: number;
+    preferred_warehouse_name: string;
+  }> = [];
+
+  let canConsolidateAny = false;
+
+  for (const bo of openBackorders) {
+    const prod = productMap.get(bo.productId);
+    const prodName = prod ? prod.name : `Product #${bo.productId}`;
+
+    // Find if any active warehouse has available stock
+    for (const wh of activeWhs) {
+      const stock = stockRows.find(
+        (s) => s.warehouseId === wh.id && s.productId === bo.productId
+      );
+      const available = stock ? Math.max(0, stock.quantityOnHand - stock.quantityReserved) : 0;
+
+      if (available > 0) {
+        canConsolidateAny = true;
+        restockedItems.push({
+          backorder_id: bo.id,
+          quote_line_id: bo.quoteLineId,
+          product_id: bo.productId,
+          product_name: prodName,
+          quantity_backordered: bo.quantityRemaining,
+          quantity_available_now: available,
+          preferred_warehouse_id: wh.id,
+          preferred_warehouse_name: wh.name,
+        });
+        break; // matched with lowest cost warehouse
+      }
+    }
+  }
+
+  return {
+    has_new_stock: canConsolidateAny,
+    can_consolidate: canConsolidateAny,
+    backorders: openBackorders.map((b) => ({
+      id: b.id,
+      quote_line_id: b.quoteLineId,
+      product_id: b.productId,
+      quantity_backordered: b.quantityRemaining,
+      product_name: productMap.get(b.productId)?.name || `Product #${b.productId}`,
+    })),
+    restocked_items: restockedItems,
+  };
+}
+
+export async function consolidateBackorders(quoteId: number, userId: number) {
+  const quote = await getQuoteOrThrow(quoteId);
+
+  const openBackorders = await db
+    .select()
+    .from(backorders)
+    .where(and(eq(backorders.quoteId, quoteId), eq(backorders.status, "open")));
+
+  if (openBackorders.length === 0) {
+    return {
+      success: true,
+      consolidated_count: 0,
+      message: "No open backorders found to consolidate.",
+    };
+  }
+
+  const activeWhs = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight));
+
+  const consolidated: any[] = [];
+
+  for (const bo of openBackorders) {
+    let remaining = bo.quantityRemaining;
+
+    for (const wh of activeWhs) {
+      if (remaining <= 0) break;
+
+      const [stock] = await db
+        .select()
+        .from(warehouseStock)
+        .where(
+          and(
+            eq(warehouseStock.warehouseId, wh.id),
+            eq(warehouseStock.productId, bo.productId)
+          )
+        )
+        .limit(1);
+
+      const available = stock ? Math.max(0, stock.quantityOnHand - stock.quantityReserved) : 0;
+      if (available <= 0) continue;
+
+      const take = Math.min(remaining, available);
+
+      // Create fulfillment split
+      const [splitRecord] = await db
+        .insert(fulfillmentSplits)
+        .values({
+          quoteId,
+          quoteLineId: bo.quoteLineId,
+          warehouseId: wh.id,
+          quantity: take,
+          quantityAllocated: take,
+          quantityFulfilled: 0,
+          isBackordered: false,
+          status: "allocated",
+          allocatedBy: userId,
+          notes: "Consolidated backorder allocation from newly arrived stock",
+        })
+        .returning();
+
+      consolidated.push(splitRecord);
+
+      // Decrement stock
+      await db
+        .update(warehouseStock)
+        .set({
+          quantity: sql`${warehouseStock.quantity} - ${take}`,
+          quantityOnHand: sql`${warehouseStock.quantityOnHand} - ${take}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(warehouseStock.id, stock.id));
+
+      // Stock movement audit
+      await db.insert(stockMovements).values({
+        warehouseId: wh.id,
+        productId: bo.productId,
+        quantityChange: -take,
+        movementType: "backorder_consolidation",
+        referenceId: quote.quoteNumber,
+        performedBy: userId,
+        notes: `Backorder consolidated for quote ${quote.quoteNumber}`,
+      });
+
+      remaining -= take;
+    }
+
+    // Update backorder record
+    if (remaining <= 0) {
+      await db
+        .update(backorders)
+        .set({
+          quantityRemaining: 0,
+          status: "resolved",
+          resolvedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(backorders.id, bo.id));
+    } else if (remaining < bo.quantityRemaining) {
+      await db
+        .update(backorders)
+        .set({
+          quantityRemaining: remaining,
+          status: "partially_resolved",
+          updatedAt: new Date(),
+        })
+        .where(eq(backorders.id, bo.id));
+    }
+  }
+
+  // Audit log
+  await db.insert(approvalLogs).values({
+    quoteId,
+    reviewerId: userId,
+    action: "backorder_consolidated",
+    level: "operations",
+    reason: `Consolidated ${consolidated.length} backorder splits following inbound restock`,
+  });
+
+  return {
+    success: true,
+    consolidated_count: consolidated.length,
+    message: `Successfully consolidated ${consolidated.length} backordered items into active fulfillment splits.`,
+  };
+}
+
+export async function simulateInboundRestock(quoteId: number, userId?: number) {
+  const openBackorders = await db
+    .select()
+    .from(backorders)
+    .where(and(eq(backorders.quoteId, quoteId), eq(backorders.status, "open")));
+
+  let targetProductIds: number[] = [];
+  if (openBackorders.length > 0) {
+    targetProductIds = openBackorders.map((b) => b.productId);
+  } else {
+    // If no backorder record committed yet, get from split calculation
+    const rec = await calculateWarehouseSplit(quoteId);
+    targetProductIds = rec.backordered.map((b) => b.product_id);
+  }
+
+  const [primaryWh] = await db
+    .select()
+    .from(warehouses)
+    .where(eq(warehouses.isActive, true))
+    .orderBy(asc(warehouses.shippingCostWeight))
+    .limit(1);
+
+  if (!primaryWh) throw ApiError.badRequest("No active warehouse found for restock");
+
+  let restockedCount = 0;
+  for (const pid of targetProductIds) {
+    await updateWarehouseStock(
+      primaryWh.id,
+      {
+        product_id: pid,
+        quantity: 50,
+      },
+      userId
+    );
+    restockedCount++;
+  }
+
+  return {
+    success: true,
+    warehouse_name: primaryWh.name,
+    restocked_products_count: restockedCount,
+    message: `Restocked inbound inventory (+50 units) at ${primaryWh.name} for ${restockedCount} products.`,
+  };
+}
+

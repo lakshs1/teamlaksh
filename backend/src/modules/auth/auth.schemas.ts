@@ -14,14 +14,14 @@ export const registerSchema = z
     email: z.string().email("Invalid email format").openapi({ example: "rep@dealflow360.dev" }),
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
+      .min(4, "Password must be at least 4 characters")
       .openapi({ example: "password123" }),
     name: z
       .string()
       .min(2, "Name must be at least 2 characters")
       .openapi({ example: "Jane Sales" }),
     role: z
-      .enum(["admin", "manager", "rep", "finance", "operations"])
+      .enum(["admin", "manager", "rep", "finance_operations", "finance", "operations", "customer"])
       .default("rep")
       .openapi({ example: "rep" }),
   })
@@ -42,7 +42,7 @@ export const refreshSchema = z
 
 export const roleSelectSchema = z
   .object({
-    role: z.enum(["admin", "manager", "rep", "finance", "operations"]).openapi({ example: "manager" }),
+    role: z.enum(["admin", "manager", "rep", "finance_operations", "finance", "operations", "customer"]).openapi({ example: "manager" }),
   })
   .openapi("RoleSelectRequest");
 

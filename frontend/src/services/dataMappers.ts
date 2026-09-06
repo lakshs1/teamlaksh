@@ -81,6 +81,17 @@ export function mapQuote(q: any): Quotation {
     blendedRiskScore: num(q.blendedRiskScore),
     requiresManagerApproval: approvalRoute === 'manager' || approvalRoute === 'manager_finance',
     requiresFinanceApproval: approvalRoute === 'manager_finance',
+    portalToken: q.portalToken || q.portal_token || undefined,
+    comments: q.comments || [],
+    approvalLogs: q.approvalLogs || [],
+    pendingCounterOffer: q.pendingCounterOffer ?? null,
+    auditTrail: (q.approvalLogs || []).map((log: any) => ({
+      step: log.level || log.step || 'Review',
+      user: log.reviewer?.name || log.reviewerName || log.user || 'System',
+      status: log.action === 'approved' ? 'Approved' : log.action === 'rejected' ? 'Rejected' : log.action || 'Logged',
+      timestamp: log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '',
+      note: log.reason || log.note || undefined,
+    })),
   };
 }
 
@@ -94,16 +105,25 @@ export function mapApproval(q: any): ApprovalItem {
     note: log.reason || log.note || undefined,
   }));
 
+  const isApproved = q.status === 'approved';
+  const isRejected = q.status === 'rejected';
+
   return {
     id: str(q.id),
-    reference: `APP/${str(q.id).padStart(5, '0')}`,
+    reference: q.quoteNumber || `QT-${str(q.id).padStart(4, '0')}`,
     quotationId: str(q.id),
-    customerName: q.customer?.name || q.customerName || 'Unknown',
+    customerName: q.customer?.name || q.customerName || 'Unknown Customer',
+    customerTier: q.customer?.tier?.name || q.customerTier || 'Gold Tier',
     requestType: 'Discount Approval',
     amount: num(q.grandTotal),
+    totalDiscount: num(q.totalDiscount),
     requestedBy: q.rep?.name || q.requestedBy || 'Sales Rep',
     requestedDate: dateStr(q.createdAt),
-    status: q.status === 'approved' ? 'Approved' : q.status === 'rejected' ? 'Rejected' : 'Pending',
+    status: isApproved ? 'Approved' : isRejected ? 'Rejected' : 'Pending',
+    currentStatus: q.status,
+    approvalRoute: q.approvalRoute || 'manager',
+    canAct: q.canAct ?? false,
+    requiredLevelText: q.requiredLevelText || (q.approvalRoute === 'manager_finance' ? 'Level 2: Finance & Operations' : 'Level 1: Manager Review'),
     blendedRiskScore: num(q.blendedRiskScore),
     reason: q.notes || '',
     auditTrail,
@@ -112,23 +132,58 @@ export function mapApproval(q: any): ApprovalItem {
 
 // ─── Fulfillment ────────────────────────────────────────────────
 export function mapFulfillment(data: any): FulfillmentItem {
-  const splits: WarehouseSplit[] = (data.splits || []).map((s: any) => ({
-    warehouseName: s.warehouse?.name || s.warehouseName || `Warehouse ${s.warehouseId}`,
-    quantityFulfilled: num(s.quantityAllocated || s.quantity),
-    stockAvailable: num(s.stockAvailable || s.quantityOnHand),
-    estimatedCost: num(s.estimatedCost || 0),
-    shipmentCount: 1,
+  const sourceSplits = (data.warehouse_splits && data.warehouse_splits.length > 0)
+    ? data.warehouse_splits
+    : (data.splits || []);
+
+  const splits: WarehouseSplit[] = sourceSplits.map((s: any) => ({
+    warehouseId: s.warehouse_id || s.warehouseId,
+    warehouseName: s.warehouse_name || s.warehouse?.name || s.warehouseName || `Warehouse ${s.warehouseId || ''}`,
+    quantityFulfilled: num(s.quantity_fulfilled || s.quantityAllocated || s.quantity),
+    stockAvailable: num(s.stock_available || s.stockAvailable || s.quantityOnHand),
+    estimatedCost: num(s.estimated_cost || s.estimatedCost || 0),
+    shipmentCount: num(s.shipment_count || 1),
+    shippingCostWeight: num(s.shipping_cost_weight || 1.0),
+    items: (s.items || []).map((it: any) => ({
+      quoteLineId: it.quote_line_id || it.quoteLineId,
+      productId: it.product_id || it.productId,
+      productName: it.product_name || it.productName || 'Item',
+      quantity: num(it.quantity),
+    })),
   }));
+
+  const backorderedList = (data.backordered || []).map((b: any) => ({
+    id: b.id,
+    quoteLineId: b.quote_line_id || b.quoteLineId,
+    productId: b.product_id || b.productId,
+    productName: b.product_name || b.productName || 'Product',
+    quantity: num(b.quantity_backordered || b.quantityRemaining || b.quantity),
+  }));
+
+  const customerName =
+    data.customer?.name ||
+    data.quote?.customer?.name ||
+    data.customerName ||
+    data.customer_name ||
+    'Unknown';
+
+  const ref =
+    data.reference ||
+    (data.quoteNumber ? data.quoteNumber.replace('QT-', 'SO/') : '') ||
+    (data.quote?.quoteNumber ? data.quote.quoteNumber.replace('QT-', 'SO/') : '') ||
+    `SO/${str(data.quoteId || data.id).padStart(5, '0')}`;
 
   return {
     id: str(data.quoteId || data.id),
-    reference: `SO/${str(data.quoteId || data.id).padStart(5, '0')}`,
-    quotationReference: data.quote?.quoteNumber || data.quotationReference || '',
-    customerName: data.quote?.customer?.name || data.customerName || 'Unknown',
-    scheduledDate: dateStr(data.createdAt),
+    reference: ref,
+    quotationReference: data.quote?.quoteNumber || data.quoteNumber || data.quotationReference || '',
+    customerName,
+    scheduledDate: dateStr(data.scheduledDate || data.createdAt || data.date),
     status: data.status || 'Ready',
-    responsible: data.performedBy || data.responsible || 'Operations',
-    lines: (data.lines || []).map((l: any) => ({
+    responsible: data.performedBy || data.responsible || data.rep?.name || 'Operations',
+    lines: (data.lines || data.quote?.lines || []).map((l: any) => ({
+      id: l.id,
+      productId: l.productId,
       productName: l.product?.name || l.productName || '',
       description: l.description || '',
       demand: num(l.quantity),
@@ -136,9 +191,12 @@ export function mapFulfillment(data: any): FulfillmentItem {
       unit: l.product?.unit || l.unit || 'Units',
     })),
     splits,
-    backorderPrompt: (data.backordered || []).length > 0,
+    totalShippingCost: num(data.total_estimated_shipping_cost || 0),
+    backorderPrompt: backorderedList.length > 0,
+    backorderedItems: backorderedList,
   };
 }
+
 
 // ─── Subscription ───────────────────────────────────────────────
 const INTERVAL_MAP: Record<string, SubscriptionItem['billingFrequency']> = {
@@ -179,13 +237,14 @@ export function mapInvoice(inv: any): InvoiceItem {
 
   return {
     id: str(inv.id),
-    reference: inv.invoiceNumber || `INV/${str(inv.id).padStart(5, '0')}`,
+    reference: inv.invoiceNumber || inv.invoice_number || `INV/${str(inv.id).padStart(5, '0')}`,
     customerName: inv.customer?.name || inv.customerName || 'Unknown',
-    invoiceDate: dateStr(inv.createdAt),
-    dueDate: dateStr(inv.dueDate),
+    invoiceDate: dateStr(inv.createdAt || inv.created_at),
+    dueDate: dateStr(inv.dueDate || inv.due_date),
     amount: num(inv.total),
     status,
     paymentTerms: inv.paymentTerms || 'Net 30',
+
     lines: (inv.lines || []).map((l: any) => ({
       productName: l.product?.name || l.productName || '',
       description: l.description || '',
@@ -211,17 +270,38 @@ const SEVERITY_MAP: Record<string, DealHealthItem['severity']> = {
 };
 
 export function mapDealAlert(alert: any): DealHealthItem {
+  const quoteRef =
+    alert.quote_number ||
+    alert.quoteNumber ||
+    alert.quote?.quoteNumber ||
+    (alert.quote_id || alert.quoteId || alert.quote?.id ? `QT-${alert.quote_id || alert.quoteId || alert.quote?.id}` : 'Quote');
+
+  const custName =
+    alert.customer_name ||
+    alert.customerName ||
+    alert.customer?.name ||
+    alert.quote?.customer?.name ||
+    'Unknown';
+
+  const rep =
+    alert.rep_name ||
+    alert.repName ||
+    alert.rep?.name ||
+    alert.quote?.rep?.name ||
+    'Sales Rep';
+
   return {
     id: str(alert.id),
-    quotationRef: alert.quote?.quoteNumber || `QT-${alert.quoteId}`,
-    customerName: alert.quote?.customer?.name || alert.customerName || 'Unknown',
-    repName: alert.quote?.rep?.name || alert.repName || 'Rep',
-    amount: num(alert.quote?.grandTotal || alert.amount),
-    daysInactive: num(alert.daysInactive || 0),
+    quoteId: alert.quote_id || alert.quoteId || alert.quote?.id,
+    quotationRef: quoteRef,
+    customerName: custName,
+    repName: rep,
+    amount: num(alert.quote?.grandTotal || alert.amount || alert.grand_total || 0),
+    daysInactive: num(alert.days_inactive || alert.daysInactive || 0),
     riskCategory: RISK_MAP[alert.type] || 'Stalled Deal',
     severity: SEVERITY_MAP[alert.severity] || 'Medium',
     description: alert.message || alert.description || '',
-    triggeredAction: alert.isResolved ? 'Resolved' : undefined,
+    triggeredAction: (alert.is_resolved || alert.isResolved) ? 'Resolved' : undefined,
   };
 }
 
@@ -259,12 +339,15 @@ export function mapAuthUser(u: any) {
 const ROLE_BACKEND_TO_FRONTEND: Record<string, string> = {
   admin: 'ADMIN',
   manager: 'MANAGER',
-  rep: 'USER',
+  rep: 'rep',
+  customer: 'customer',
   finance: 'MANAGER',
   operations: 'USER',
 };
 
-export function mapRole(backendRole: string): 'USER' | 'MANAGER' | 'ADMIN' {
-  return (ROLE_BACKEND_TO_FRONTEND[backendRole] || 'USER') as 'USER' | 'MANAGER' | 'ADMIN';
+export function mapRole(backendRole: string): 'USER' | 'MANAGER' | 'ADMIN' | 'customer' | 'rep' {
+  if (backendRole === 'customer') return 'customer';
+  if (backendRole === 'rep') return 'rep';
+  return (ROLE_BACKEND_TO_FRONTEND[backendRole] || 'USER') as 'USER' | 'MANAGER' | 'ADMIN' | 'customer' | 'rep';
 }
 

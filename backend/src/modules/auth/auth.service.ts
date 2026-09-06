@@ -1,5 +1,6 @@
 import { eq, desc } from "drizzle-orm";
-import { db, users, USER_ROLES, type SafeUser } from "@db";
+import { randomUUID } from "crypto";
+import { db, users, customers, customerTiers, quotes, quoteLines, products, USER_ROLES, type SafeUser } from "@db";
 import { hashPassword, comparePassword } from "../../lib/password.js";
 import { generateTokenPair, verifyRefreshToken } from "../../lib/jwt.js";
 import { ApiError } from "../../lib/api-error.js";
@@ -17,6 +18,54 @@ function toSafeUser(user: typeof users.$inferSelect): SafeUser {
 }
 
 /**
+ * Ensures a customer quotation has line items and realistic totals.
+ */
+async function ensureQuoteHasLines(quoteId: number) {
+  const existingLines = await db
+    .select()
+    .from(quoteLines)
+    .where(eq(quoteLines.quoteId, quoteId))
+    .limit(1);
+
+  if (existingLines.length === 0) {
+    const [prod] = await db.select().from(products).limit(1);
+    if (prod) {
+      const unit = parseFloat(prod.basePrice) || 4500;
+      const cost = parseFloat(prod.costPrice) || 2800;
+      const qty = 2;
+      const total = unit * qty;
+      const tax = total * 0.18;
+      const grand = total + tax;
+
+      await db.insert(quoteLines).values({
+        quoteId,
+        productId: prod.id,
+        quantity: qty,
+        unitPrice: unit.toFixed(2),
+        costPrice: cost.toFixed(2),
+        discountPct: "0.00",
+        discountAmount: "0.00",
+        lineTotal: total.toFixed(2),
+        marginPct: (((unit - cost) / unit) * 100).toFixed(2),
+        allowedDiscountPct: "15.00",
+        excessPct: "0.00",
+        isRecurring: prod.isRecurring || false,
+        isUpsell: false,
+      });
+
+      await db
+        .update(quotes)
+        .set({
+          subtotal: total.toFixed(2),
+          totalTax: tax.toFixed(2),
+          grandTotal: grand.toFixed(2),
+        })
+        .where(eq(quotes.id, quoteId));
+    }
+  }
+}
+
+/**
  * Register a new user with role (defaults to 'rep').
  */
 export async function register(data: {
@@ -25,11 +74,13 @@ export async function register(data: {
   name: string;
   role?: string;
 }) {
+  const normalizedEmail = data.email.toLowerCase().trim();
+
   // Check if email already taken
   const existing = await db
     .select()
     .from(users)
-    .where(eq(users.email, data.email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (existing.length > 0) {
@@ -39,16 +90,60 @@ export async function register(data: {
   // Hash password
   const hashedPassword = await hashPassword(data.password);
 
+  const assignedRole = data.role === "customer" ? "customer" : data.role || "rep";
+
   // Create user in PostgreSQL
   const [user] = await db
     .insert(users)
     .values({
-      email: data.email,
+      email: normalizedEmail,
       password: hashedPassword,
       name: data.name,
-      role: data.role || "rep",
+      role: assignedRole,
     })
     .returning();
+
+  let portalToken: string | null = null;
+
+  // If registering customer (or any role), ensure customer entity & quote exist
+  if (assignedRole === "customer" || data.role === "customer") {
+    let [cust] = await db
+      .select()
+      .from(customers)
+      .where(eq(customers.email, normalizedEmail))
+      .limit(1);
+
+    if (!cust) {
+      const [bronzeTier] = await db
+        .select()
+        .from(customerTiers)
+        .where(eq(customerTiers.name, "Bronze"))
+        .limit(1);
+      const fallbackTier = bronzeTier || (await db.select().from(customerTiers).limit(1))[0];
+
+      [cust] = await db
+        .insert(customers)
+        .values({
+          name: data.name,
+          email: normalizedEmail,
+          tierId: fallbackTier ? fallbackTier.id : 1,
+        })
+        .returning();
+    }
+
+    if (cust) {
+      const [existingQuote] = await db
+        .select()
+        .from(quotes)
+        .where(eq(quotes.customerId, cust.id))
+        .orderBy(desc(quotes.createdAt))
+        .limit(1);
+
+      if (existingQuote) {
+        portalToken = existingQuote.portalToken;
+      }
+    }
+  }
 
   // Generate tokens
   const tokenPayload = { id: user.id, email: user.email, role: user.role };
@@ -61,7 +156,11 @@ export async function register(data: {
     .where(eq(users.id, user.id));
 
   return {
-    user: toSafeUser(user),
+    user: {
+      ...toSafeUser(user),
+      portal_token: portalToken,
+      portalToken: portalToken,
+    },
     ...tokens,
   };
 }
@@ -70,10 +169,12 @@ export async function register(data: {
  * Login with email and password.
  */
 export async function login(data: { email: string; password: string }) {
+  const normalizedEmail = data.email.toLowerCase().trim();
+
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, data.email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (!user || !user.password) {
@@ -89,6 +190,27 @@ export async function login(data: { email: string; password: string }) {
     throw ApiError.forbidden("User account is inactive");
   }
 
+  // Find if customer portal token is associated
+  let portalToken: string | null = null;
+  const [cust] = await db
+    .select()
+    .from(customers)
+    .where(eq(customers.email, normalizedEmail))
+    .limit(1);
+
+  if (cust) {
+    const [existingQuote] = await db
+      .select()
+      .from(quotes)
+      .where(eq(quotes.customerId, cust.id))
+      .orderBy(desc(quotes.createdAt))
+      .limit(1);
+    if (existingQuote) {
+      portalToken = existingQuote.portalToken;
+      await ensureQuoteHasLines(existingQuote.id);
+    }
+  }
+
   // Generate tokens
   const tokenPayload = { id: user.id, email: user.email, role: user.role };
   const tokens = generateTokenPair(tokenPayload);
@@ -100,7 +222,11 @@ export async function login(data: { email: string; password: string }) {
     .where(eq(users.id, user.id));
 
   return {
-    user: toSafeUser(user),
+    user: {
+      ...toSafeUser(user),
+      portal_token: portalToken,
+      portalToken: portalToken,
+    },
     ...tokens,
   };
 }

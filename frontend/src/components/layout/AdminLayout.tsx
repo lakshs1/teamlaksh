@@ -5,9 +5,9 @@ import { Avatar } from '../ui/Avatar';
 import styles from './AdminLayout.module.css';
 
 const NAV = [
-  { to: '/admin',          label: '📊  Dashboard', exact: true },
-  { to: '/admin/users',    label: '👥  Users' },
-  { to: '/admin/settings', label: '⚙️  Settings' },
+  { to: '/admin',          label: 'Dashboard', exact: true },
+  { to: '/admin/users',    label: 'Users' },
+  { to: '/admin/settings', label: 'Settings' },
 ];
 
 export default function AdminLayout() {

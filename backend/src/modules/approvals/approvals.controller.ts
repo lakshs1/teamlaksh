@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import {
+  getApprovalsQueue,
   getPendingApprovals,
   getApprovalLogs,
   approveQuote,
@@ -12,6 +13,19 @@ import {
   reviseActionSchema,
 } from "./approvals.schemas.js";
 import { ApiError } from "../../lib/api-error.js";
+
+export async function listApprovalsHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = (req as any).user;
+    if (!user) throw ApiError.unauthorized("Not authenticated");
+    const status = req.query.status as string | undefined;
+    const scope = req.query.scope as string | undefined;
+    const result = await getApprovalsQueue(user, { status, scope });
+    res.status(200).json({ success: true, data: result.items, stats: result.stats });
+  } catch (err) {
+    next(err);
+  }
+}
 
 export async function getPendingApprovalsHandler(req: Request, res: Response, next: NextFunction) {
   try {

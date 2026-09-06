@@ -21,7 +21,7 @@ const router = Router();
 router.get(
   "/deal-health",
   authenticate,
-  authorize("rep", "manager", "admin", "finance", "operations"),
+  authorize("rep", "manager", "admin", "finance", "operations", "finance_operations"),
   validate({ query: dealHealthQuerySchema }),
   getDealHealthHandler
 );
@@ -30,7 +30,7 @@ router.get(
 router.get(
   "/alerts",
   authenticate,
-  authorize("rep", "manager", "admin", "finance", "operations"),
+  authorize("rep", "manager", "admin", "finance", "operations", "finance_operations"),
   validate({ query: alertsQuerySchema }),
   listAlertsHandler
 );
@@ -38,14 +38,14 @@ router.get(
 router.post(
   "/alerts/:id/resolve",
   authenticate,
-  authorize("rep", "manager", "admin"),
+  authorize("rep", "manager", "admin", "finance", "operations", "finance_operations"),
   resolveAlertHandler
 );
 
 router.post(
   "/alerts/:id/escalate",
   authenticate,
-  authorize("rep", "manager", "admin"),
+  authorize("rep", "manager", "admin", "finance", "operations", "finance_operations"),
   validate({ body: escalateAlertSchema }),
   escalateAlertHandler
 );
@@ -54,7 +54,7 @@ router.post(
 router.get(
   "/reports/sales",
   authenticate,
-  authorize("rep", "manager", "admin", "finance", "operations"),
+  authorize("rep", "manager", "admin", "finance", "operations", "finance_operations"),
   validate({ query: salesReportQuerySchema }),
   getSalesReportHandler
 );

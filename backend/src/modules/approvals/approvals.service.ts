@@ -1,12 +1,12 @@
 import { eq, and, inArray, desc } from "drizzle-orm";
-import { db, quotes, approvalLogs, customers, users } from "@db";
+import { db, quotes, approvalLogs, customers, users, customerTiers } from "@db";
 import { ApiError } from "../../lib/api-error.js";
 
 // ═══════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════
 
-type ReviewerRole = "manager" | "finance" | "admin";
+type ReviewerRole = "manager" | "finance" | "operations" | "finance_operations" | "admin";
 
 const PENDING_MANAGER_STATUS = "pending_manager";
 const PENDING_FINANCE_STATUS = "pending_finance";
@@ -23,7 +23,7 @@ async function getQuoteOrThrow(id: number) {
 
 function levelForRole(role: ReviewerRole): string {
   if (role === "manager") return "manager";
-  if (role === "finance") return "finance";
+  if (role === "finance" || role === "operations" || role === "finance_operations") return "finance_operations";
   return "admin";
 }
 
@@ -32,22 +32,148 @@ function levelForRole(role: ReviewerRole): string {
 // ═══════════════════════════════════════════════════════════
 
 /**
+ * Full Approval Governance Queue — returns quotes across all governance states
+ * with enriched customer, customer tier, sales rep data, and canAct calculation.
+ */
+export async function getApprovalsQueue(
+  reviewer: { id: number; role: string },
+  query: { status?: string; scope?: string } = {}
+) {
+  const allRows = await db
+    .select({
+      id: quotes.id,
+      quoteNumber: quotes.quoteNumber,
+      customerId: quotes.customerId,
+      repId: quotes.repId,
+      status: quotes.status,
+      subtotal: quotes.subtotal,
+      totalDiscount: quotes.totalDiscount,
+      totalTax: quotes.totalTax,
+      grandTotal: quotes.grandTotal,
+      blendedRiskScore: quotes.blendedRiskScore,
+      approvalRoute: quotes.approvalRoute,
+      notes: quotes.notes,
+      expiresAt: quotes.expiresAt,
+      createdAt: quotes.createdAt,
+      updatedAt: quotes.updatedAt,
+      customer: {
+        id: customers.id,
+        name: customers.name,
+        email: customers.email,
+      },
+      tierName: customerTiers.name,
+      rep: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
+    })
+    .from(quotes)
+    .leftJoin(customers, eq(quotes.customerId, customers.id))
+    .leftJoin(customerTiers, eq(customers.tierId, customerTiers.id))
+    .leftJoin(users, eq(quotes.repId, users.id))
+    .orderBy(desc(quotes.updatedAt));
+
+  // Determine quotes that are part of the discount approval governance flow
+  const governanceQuotes = allRows.filter((q) => {
+    const isApprovalStatus = [
+      PENDING_MANAGER_STATUS,
+      PENDING_FINANCE_STATUS,
+      "approved",
+      "rejected",
+      "revision",
+    ].includes(q.status);
+    const hasRoute = q.approvalRoute === "manager" || q.approvalRoute === "manager_finance";
+    const hasRisk = parseFloat(String(q.blendedRiskScore || "0")) > 0;
+    return isApprovalStatus || hasRoute || hasRisk;
+  });
+
+  // Calculate canAct and stage per reviewer
+  const isManager = reviewer.role === "manager";
+  const isFinanceOps =
+    reviewer.role === "finance" ||
+    reviewer.role === "operations" ||
+    reviewer.role === "finance_operations";
+  const isAdmin = reviewer.role === "admin";
+
+  const enriched: any[] = governanceQuotes.map((q: any) => {
+    const canAct =
+      (isAdmin && [PENDING_MANAGER_STATUS, PENDING_FINANCE_STATUS].includes(q.status)) ||
+      (isManager && q.status === PENDING_MANAGER_STATUS) ||
+      (isFinanceOps && q.status === PENDING_FINANCE_STATUS);
+
+    let currentStage = "approved";
+    if (q.status === PENDING_MANAGER_STATUS) currentStage = "manager";
+    else if (q.status === PENDING_FINANCE_STATUS) currentStage = "finance";
+    else if (q.status === "rejected") currentStage = "rejected";
+    else if (q.status === "revision") currentStage = "revision";
+
+    let requiredLevelText = "Level 1: Manager Review";
+    if (q.approvalRoute === "manager_finance" || parseFloat(String(q.blendedRiskScore || "0")) > 25) {
+      requiredLevelText = "Level 2: Finance & Operations";
+    }
+
+    return {
+      ...q,
+      customer: {
+        ...q.customer,
+        tier: {
+          name: q.tierName || "Standard",
+        },
+      },
+      canAct,
+      currentStage,
+      requiredLevelText,
+    };
+  });
+
+  // Overall counts
+  const stats = {
+    total: enriched.length,
+    myQueue: enriched.filter((q: any) => q.canAct).length,
+    pendingManager: enriched.filter((q: any) => q.status === PENDING_MANAGER_STATUS).length,
+    pendingFinance: enriched.filter((q: any) => q.status === PENDING_FINANCE_STATUS).length,
+    approved: enriched.filter((q: any) => q.status === "approved").length,
+    rejected: enriched.filter((q: any) => q.status === "rejected").length,
+  };
+
+  // Filter application
+  let filtered = enriched;
+  if (query.scope === "my_queue") {
+    filtered = filtered.filter((q: any) => q.canAct);
+  } else if (query.status === "pending") {
+    filtered = filtered.filter(
+      (q: any) => q.status === PENDING_MANAGER_STATUS || q.status === PENDING_FINANCE_STATUS
+    );
+  } else if (query.status === "approved") {
+    filtered = filtered.filter((q: any) => q.status === "approved");
+  } else if (query.status === "rejected") {
+    filtered = filtered.filter((q: any) => q.status === "rejected");
+  }
+
+  return {
+    items: filtered,
+    stats,
+  };
+}
+
+/**
  * Returns quotes pending this reviewer's action, role-gated:
  * - manager → pending_manager queue
- * - finance  → pending_finance queue
- * - admin    → both queues
+ * - finance / operations / finance_operations → pending_finance queue
+ * - admin → both queues
  */
 export async function getPendingApprovals(reviewer: { id: number; role: string }) {
   let statusFilter: string[];
 
   if (reviewer.role === "manager") {
     statusFilter = [PENDING_MANAGER_STATUS];
-  } else if (reviewer.role === "finance") {
+  } else if (reviewer.role === "finance" || reviewer.role === "operations" || reviewer.role === "finance_operations") {
     statusFilter = [PENDING_FINANCE_STATUS];
   } else if (reviewer.role === "admin" || reviewer.role === "rep") {
     statusFilter = [PENDING_MANAGER_STATUS, PENDING_FINANCE_STATUS];
   } else {
-    throw ApiError.forbidden("Only manager, finance, admin, or rep roles can access the approval queue");
+    throw ApiError.forbidden("Only manager, finance/operations, admin, or rep roles can access the approval queue");
   }
 
   const conditions = [inArray(quotes.status, statusFilter)];
@@ -76,13 +202,29 @@ export async function getPendingApprovals(reviewer: { id: number; role: string }
         name: customers.name,
         email: customers.email,
       },
+      tierName: customerTiers.name,
+      rep: {
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      },
     })
     .from(quotes)
     .leftJoin(customers, eq(quotes.customerId, customers.id))
+    .leftJoin(customerTiers, eq(customers.tierId, customerTiers.id))
+    .leftJoin(users, eq(quotes.repId, users.id))
     .where(and(...conditions))
     .orderBy(desc(quotes.updatedAt));
 
-  return rows;
+  return rows.map((r) => ({
+    ...r,
+    customer: {
+      ...r.customer,
+      tier: {
+        name: r.tierName || "Standard",
+      },
+    },
+  }));
 }
 
 export async function getApprovalLogs(quoteId: number) {
@@ -128,15 +270,17 @@ export async function approveQuote(
   const quote = await getQuoteOrThrow(quoteId);
   const previousStatus = quote.status;
   const role = reviewer.role as ReviewerRole;
+  const isFinanceOps = role === "finance" || role === "operations" || role === "finance_operations";
+  const isManager = role === "manager";
 
   // Validate that this reviewer CAN act on this quote
   if (
-    (role === "manager" && quote.status !== PENDING_MANAGER_STATUS) ||
-    (role === "finance" && quote.status !== PENDING_FINANCE_STATUS)
+    (isManager && quote.status !== PENDING_MANAGER_STATUS) ||
+    (isFinanceOps && quote.status !== PENDING_FINANCE_STATUS)
   ) {
     throw ApiError.badRequest(
       `Cannot approve a quote with status '${quote.status}' as ${role}. Expected: ${
-        role === "manager" ? PENDING_MANAGER_STATUS : PENDING_FINANCE_STATUS
+        isManager ? PENDING_MANAGER_STATUS : PENDING_FINANCE_STATUS
       }`
     );
   }
@@ -151,10 +295,10 @@ export async function approveQuote(
   // Determine next state
   let newStatus: string;
 
-  if (role === "finance" || (role === "admin" && quote.status === PENDING_FINANCE_STATUS)) {
-    // Finance approval always finalizes
+  if (isFinanceOps || (role === "admin" && quote.status === PENDING_FINANCE_STATUS)) {
+    // Finance/Operations approval always finalizes
     newStatus = "approved";
-  } else if (role === "manager" || (role === "admin" && quote.status === PENDING_MANAGER_STATUS)) {
+  } else if (isManager || (role === "admin" && quote.status === PENDING_MANAGER_STATUS)) {
     // Manager: check if we need finance next
     if (quote.approvalRoute === "manager_finance") {
       newStatus = PENDING_FINANCE_STATUS;
@@ -182,7 +326,7 @@ export async function approveQuote(
   const message =
     newStatus === "approved"
       ? "Quote fully approved"
-      : `Manager approved — awaiting finance review`;
+      : `Manager approved — awaiting finance/operations review`;
 
   return {
     quoteId,
@@ -208,12 +352,15 @@ export async function rejectQuote(
     throw ApiError.badRequest(`Cannot reject a quote with status '${quote.status}'`);
   }
 
+  const isFinanceOps = role === "finance" || role === "operations" || role === "finance_operations";
+  const isManager = role === "manager";
+
   // Role-status check
-  if (role === "manager" && quote.status === PENDING_FINANCE_STATUS) {
+  if (isManager && quote.status === PENDING_FINANCE_STATUS) {
     throw ApiError.forbidden("Manager cannot reject a quote in finance review");
   }
-  if (role === "finance" && quote.status === PENDING_MANAGER_STATUS) {
-    throw ApiError.forbidden("Finance cannot reject a quote in manager review");
+  if (isFinanceOps && quote.status === PENDING_MANAGER_STATUS) {
+    throw ApiError.forbidden("Finance/Operations cannot reject a quote in manager review");
   }
 
   await db
@@ -253,12 +400,15 @@ export async function reviseQuote(
     throw ApiError.badRequest(`Cannot request revision on a quote with status '${quote.status}'`);
   }
 
+  const isFinanceOps = role === "finance" || role === "operations" || role === "finance_operations";
+  const isManager = role === "manager";
+
   // Role-status check
-  if (role === "manager" && quote.status === PENDING_FINANCE_STATUS) {
+  if (isManager && quote.status === PENDING_FINANCE_STATUS) {
     throw ApiError.forbidden("Manager cannot request revision on a quote in finance review");
   }
-  if (role === "finance" && quote.status === PENDING_MANAGER_STATUS) {
-    throw ApiError.forbidden("Finance cannot request revision on a quote in manager review");
+  if (isFinanceOps && quote.status === PENDING_MANAGER_STATUS) {
+    throw ApiError.forbidden("Finance/Operations cannot request revision on a quote in manager review");
   }
 
   // Reset to draft — rep needs to re-edit and resubmit

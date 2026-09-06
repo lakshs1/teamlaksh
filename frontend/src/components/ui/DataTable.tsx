@@ -24,7 +24,7 @@ export function DataTable<T extends Record<string, any>>({
   data,
   onRowClick,
   emptyMessage = 'No data found',
-  emptyIcon = '📋',
+  emptyIcon = '',
   isLoading = false,
   loadingRows = 5,
 }: DataTableProps<T>) {
@@ -46,7 +46,7 @@ export function DataTable<T extends Record<string, any>>({
               <tr key={i} className={styles.tr}>
                 {columns.map((col) => (
                   <td key={col.key} className={styles.td}>
-                    <Skeleton variant="text" height={16} width="80%" />
+                    <div className={styles.skeleton} />
                   </td>
                 ))}
               </tr>
@@ -60,7 +60,7 @@ export function DataTable<T extends Record<string, any>>({
   if (data.length === 0) {
     return (
       <div className={styles.empty}>
-        <span className={styles.emptyIcon}>{emptyIcon}</span>
+        {emptyIcon && <span className={styles.emptyIcon}>{emptyIcon}</span>}
         <p className={styles.emptyText}>{emptyMessage}</p>
       </div>
     );

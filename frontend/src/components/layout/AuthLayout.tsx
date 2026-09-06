@@ -13,11 +13,6 @@ export default function AuthLayout() {
         <h1 className={styles.tagline}>Build. Ship.<br />Win.</h1>
         <p className={styles.sub}>Your hackathon-ready frontend template</p>
 
-        <div className={styles.featureIcons}>
-          {['⚡', '🎨', '🔒', '📊', '🚀'].map((icon) => (
-            <span key={icon} className={styles.featureIcon}>{icon}</span>
-          ))}
-        </div>
       </div>
 
       {/* Right panel — Form */}

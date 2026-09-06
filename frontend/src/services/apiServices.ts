@@ -150,10 +150,18 @@ export const quoteApi = {
     const res = await api.post(`/quotes/${quoteId}/confirm`);
     return res.data;
   },
+  acceptCounterOffer: async (quoteId: number | string, data?: { discount_pct?: number }) => {
+    const res = await api.post(`/quotes/${quoteId}/accept-counter`, data);
+    return res.data;
+  },
 };
 
 // 5. Approvals API
 export const approvalApi = {
+  getApprovals: async (params?: { status?: string; scope?: string }) => {
+    const res = await api.get('/approvals', { params });
+    return res.data;
+  },
   getPendingApprovals: async () => {
     const res = await api.get('/approvals/pending');
     return res.data;
@@ -214,16 +222,40 @@ export const fulfillmentApi = {
     const res = await api.get('/fulfillment/warehouses');
     return res.data;
   },
-  createWarehouse: async (data: { name: string; code?: string; location?: string; shipping_cost_weight?: number }) => {
+  createWarehouse: async (data: { name: string; code?: string; location?: string; shipping_cost_weight?: number; is_active?: boolean }) => {
     const res = await api.post('/fulfillment/warehouses', data);
+    return res.data;
+  },
+  updateWarehouse: async (id: number | string, data: { name?: string; code?: string; location?: string; shipping_cost_weight?: number; is_active?: boolean }) => {
+    const res = await api.patch(`/fulfillment/warehouses/${id}`, data);
     return res.data;
   },
   getWarehouseStock: async (warehouseId: number | string) => {
     const res = await api.get(`/fulfillment/warehouses/${warehouseId}/stock`);
     return res.data;
   },
-  updateStock: async (warehouseId: number | string, data: { product_id: number; quantity: number; reorder_level?: number }) => {
+  updateStock: async (warehouseId: number | string, data: { product_id: number; variant_id?: number; quantity?: number; reorder_level?: number; reorder_quantity?: number; notes?: string }) => {
     const res = await api.post(`/fulfillment/warehouses/${warehouseId}/stock`, data);
+    return res.data;
+  },
+  replenishStock: async (warehouseId: number | string, data: { product_id: number; variant_id?: number; quantity?: number; notes?: string }) => {
+    const res = await api.post(`/fulfillment/warehouses/${warehouseId}/replenish`, data);
+    return res.data;
+  },
+  checkBackordersRestock: async (quoteId: number | string) => {
+    const res = await api.get(`/fulfillment/quotes/${quoteId}/backorders/check-restock`);
+    return res.data;
+  },
+  consolidateBackorders: async (quoteId: number | string) => {
+    const res = await api.post(`/fulfillment/quotes/${quoteId}/backorders/consolidate`);
+    return res.data;
+  },
+  simulateRestock: async (quoteId: number | string) => {
+    const res = await api.post(`/fulfillment/quotes/${quoteId}/backorders/simulate-restock`);
+    return res.data;
+  },
+  simulateAllocation: async (data: { product_id: number; quantity: number }) => {
+    const res = await api.post('/fulfillment/simulate-allocation', data);
     return res.data;
   },
 };
@@ -242,8 +274,42 @@ export const billingApi = {
     const res = await api.patch(`/billing/subscriptions/${id}`, data);
     return res.data;
   },
-  cancelSubscription: async (id: number | string) => {
-    const res = await api.post(`/billing/subscriptions/${id}/cancel`);
+  cancelSubscription: async (id: number | string, data?: { reason?: string }) => {
+    const res = await api.post(`/billing/subscriptions/${id}/cancel`, data);
+    return res.data;
+  },
+  getPlans: async () => {
+    const res = await api.get('/billing/plans');
+    return res.data;
+  },
+  getPlanById: async (id: number | string) => {
+    const res = await api.get(`/billing/plans/${id}`);
+    return res.data;
+  },
+  createPlan: async (data: {
+    name: string;
+    code?: string;
+    description?: string;
+    product_id?: number;
+    interval?: string;
+    base_price: number;
+    cost_price?: number;
+    proration_rule?: string;
+    allow_mid_cycle_changes?: boolean;
+    cancellation_policy?: string;
+    refund_percentage?: number;
+    notice_period_days?: number;
+    is_active?: boolean;
+  }) => {
+    const res = await api.post('/billing/plans', data);
+    return res.data;
+  },
+  updatePlan: async (id: number | string, data: Record<string, any>) => {
+    const res = await api.patch(`/billing/plans/${id}`, data);
+    return res.data;
+  },
+  deletePlan: async (id: number | string) => {
+    const res = await api.delete(`/billing/plans/${id}`);
     return res.data;
   },
   getInvoices: async (params?: { customer_id?: number; status?: string; type?: string; page?: number; limit?: number }) => {
@@ -258,7 +324,17 @@ export const billingApi = {
     const res = await api.post(`/billing/invoices/${invoiceId}/pay`);
     return res.data;
   },
+  createInvoice: async (data: { customer_id: number; quote_id?: number; subtotal: number; tax?: number; total?: number; type?: string; due_date?: string }) => {
+    const res = await api.post('/billing/invoices', data);
+    return res.data;
+  },
+  issueCreditNote: async (data: { invoice_id?: number | string; customer_id?: number; quote_id?: number; amount: number; reason: string; notes?: string }) => {
+    const url = data.invoice_id ? `/billing/invoices/${data.invoice_id}/credit-note` : '/billing/credit-notes';
+    const res = await api.post(url, data);
+    return res.data;
+  },
 };
+
 
 // 9. Customer Portal API (Public Magic Link)
 export const portalApi = {

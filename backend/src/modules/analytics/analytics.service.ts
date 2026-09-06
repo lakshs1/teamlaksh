@@ -244,7 +244,24 @@ export async function getDealHealth(stalledDays: number = 7) {
     await db.insert(dealAlerts).values(newAlertsToInsert);
   }
 
+  const atRiskQuoteIds = new Set([
+    ...stalledQuotesList.map((sq) => sq.id),
+    ...discountAnomaliesList.map((da) => da.id),
+    ...deliveryRisksList.map((dr) => dr.quote_id),
+  ]);
+
+  const totalDeals = activeQuotes.length;
+  const atRiskDeals = atRiskQuoteIds.size;
+  const healthyDeals = Math.max(0, totalDeals - atRiskDeals);
+  const criticalCount =
+    existingAlerts.filter((a) => a.severity === "critical").length +
+    newAlertsToInsert.filter((a) => a.severity === "critical").length;
+
   return {
+    total: totalDeals,
+    healthy: healthyDeals,
+    atRisk: atRiskDeals,
+    critical: criticalCount,
     stalled_quotes: stalledQuotesList,
     discount_anomalies: discountAnomaliesList,
     delivery_risks: deliveryRisksList,
@@ -296,9 +313,13 @@ export async function listAlerts(filter: AlertsQuery) {
   const quoteRows = await db.select().from(quotes).where(inArray(quotes.id, qIds));
   const quoteMap = new Map(quoteRows.map((q) => [q.id, q]));
 
-  const cIds = Array.from(new Set(quoteRows.map((q) => q.customerId)));
+  const cIds = Array.from(new Set(quoteRows.map((q) => q.customerId).filter(Boolean)));
   const custRows = cIds.length > 0 ? await db.select().from(customers).where(inArray(customers.id, cIds)) : [];
   const custMap = new Map(custRows.map((c) => [c.id, c.name]));
+
+  const repIds = Array.from(new Set(quoteRows.map((q) => q.repId).filter(Boolean)));
+  const repRows = repIds.length > 0 ? await db.select().from(users).where(inArray(users.id, repIds)) : [];
+  const repMap = new Map(repRows.map((u) => [u.id, u.name]));
 
   const items = rows.map((a) => {
     const q = quoteMap.get(a.quoteId);
@@ -307,6 +328,8 @@ export async function listAlerts(filter: AlertsQuery) {
       quote_id: a.quoteId,
       quote_number: q?.quoteNumber,
       customer_name: q ? custMap.get(q.customerId) : undefined,
+      rep_name: q ? repMap.get(q.repId) : undefined,
+      amount: q ? Number(q.grandTotal) : undefined,
       type: a.type,
       severity: a.severity,
       message: a.message,
@@ -385,7 +408,9 @@ export async function getSalesReport(filter: SalesReportQuery) {
   const now = new Date();
   let startDate: Date | null = null;
 
-  if (filter.period === "weekly") {
+  if (filter.period === "today") {
+    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (filter.period === "weekly") {
     startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   } else if (filter.period === "monthly") {
     startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -403,8 +428,12 @@ export async function getSalesReport(filter: SalesReportQuery) {
   if (filter.rep_id) {
     conditions.push(eq(quotes.repId, filter.rep_id));
   }
-  if (filter.status) {
-    conditions.push(eq(quotes.status, filter.status));
+  if (filter.status && filter.status !== "all") {
+    if (filter.status === "pending" || filter.status === "pending_approval") {
+      conditions.push(inArray(quotes.status, ["pending_manager", "pending_finance"]));
+    } else {
+      conditions.push(eq(quotes.status, filter.status));
+    }
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -428,7 +457,7 @@ export async function getSalesReport(filter: SalesReportQuery) {
     .from(quoteLines)
     .where(inArray(quoteLines.quoteId, qIds));
 
-  // If filtered by category_id, filter quotes/lines accordingly
+  // If filtered by category_id or product_id, filter quotes/lines accordingly
   let filteredLines = matchedLines;
   let relevantProds: any[] = [];
 
@@ -440,8 +469,14 @@ export async function getSalesReport(filter: SalesReportQuery) {
   const prodCatMap = new Map(relevantProds.map((p) => [p.id, p.categoryId]));
 
   if (filter.category_id) {
-    filteredLines = matchedLines.filter(
+    filteredLines = filteredLines.filter(
       (l) => prodCatMap.get(l.productId) === filter.category_id
+    );
+  }
+
+  if (filter.product_id) {
+    filteredLines = filteredLines.filter(
+      (l) => l.productId === filter.product_id
     );
   }
 

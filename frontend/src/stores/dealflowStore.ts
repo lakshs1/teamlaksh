@@ -39,29 +39,54 @@ export interface Quotation {
   blendedRiskScore: number; // e.g. 18.5
   requiresManagerApproval: boolean;
   requiresFinanceApproval: boolean;
+  portalToken?: string;
+  comments?: any[];
+  approvalLogs?: any[];
+  pendingCounterOffer?: any | null;
+  auditTrail?: {
+    step: string;
+    user: string;
+    status: string;
+    timestamp: string;
+    note?: string;
+  }[];
 }
 
 export interface ApprovalItem {
   id: string;
-  reference: string; // APP/00012
+  reference: string; // QT-2026-0030
   quotationId: string;
   customerName: string;
+  customerTier?: string;
   requestType: 'Discount Approval' | 'Credit Limit Increase' | 'New Customer Terms';
   amount: number;
+  totalDiscount?: number;
   requestedBy: string;
   requestedDate: string;
   status: 'Pending' | 'Approved' | 'Rejected';
+  currentStatus?: string;
+  approvalRoute?: 'auto' | 'manager' | 'manager_finance' | string;
+  canAct?: boolean;
+  requiredLevelText?: string;
   blendedRiskScore: number;
   reason: string;
   auditTrail: { step: string; user: string; status: string; timestamp: string; note?: string }[];
 }
 
 export interface WarehouseSplit {
+  warehouseId?: number | string;
   warehouseName: string;
   quantityFulfilled: number;
   stockAvailable: number;
   estimatedCost: number;
   shipmentCount: number;
+  shippingCostWeight?: number;
+  items?: {
+    quoteLineId?: number;
+    productId?: number;
+    productName: string;
+    quantity: number;
+  }[];
 }
 
 export interface FulfillmentItem {
@@ -70,9 +95,12 @@ export interface FulfillmentItem {
   quotationReference: string;
   customerName: string;
   scheduledDate: string;
-  status: 'Draft' | 'Ready' | 'Picking' | 'Shipped' | 'Done' | 'Cancelled';
+  status: 'Draft' | 'Ready' | 'Picking' | 'Shipped' | 'Done' | 'Cancelled' | string;
+
   responsible: string;
   lines: {
+    id?: number | string;
+    productId?: number | string;
     productName: string;
     description: string;
     demand: number;
@@ -80,7 +108,15 @@ export interface FulfillmentItem {
     unit: string;
   }[];
   splits: WarehouseSplit[];
+  totalShippingCost?: number;
   backorderPrompt?: boolean;
+  backorderedItems?: {
+    id?: number;
+    quoteLineId?: number;
+    productId?: number;
+    productName: string;
+    quantity: number;
+  }[];
 }
 
 export interface SubscriptionItem {
@@ -122,6 +158,7 @@ export interface InvoiceItem {
 
 export interface DealHealthItem {
   id: string;
+  quoteId?: number | string;
   quotationRef: string;
   customerName: string;
   repName: string;
@@ -158,9 +195,11 @@ export interface PortalChatMessage {
   senderName: string;
   timestamp: string;
   text: string;
+  counterDiscountPct?: number | null;
+  authorType?: string;
 }
 
-export type UserRole = 'Sales Rep' | 'Sales Manager' | 'Finance' | 'Operations' | 'Admin';
+export type UserRole = 'Sales Rep' | 'Sales Manager' | 'Finance & Operations' | 'Finance' | 'Operations' | 'Admin';
 
 export interface DealFlowState {
   currentRole: UserRole;

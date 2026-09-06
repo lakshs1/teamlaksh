@@ -9,14 +9,14 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({
-  icon = '🔎',
+  icon = '',
   title,
   description,
   action,
 }: EmptyStateProps) {
   return (
     <div className={styles.emptyCard}>
-      <span className={styles.icon}>{icon}</span>
+      {icon && <span className={styles.icon}>{icon}</span>}
       <h3 className={styles.title}>{title}</h3>
       {description && <p className={styles.description}>{description}</p>}
       {action && <div className={styles.actionRow}>{action}</div>}

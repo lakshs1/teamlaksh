@@ -44,9 +44,10 @@ export default function LoginPage() {
       setAuth(user, token);
 
       if (redirectTo) navigate(redirectTo);
+      else if (user.role === 'customer') navigate('/portal');
       else if (user.role === 'MANAGER') navigate('/dashboard');
       else if (user.role === 'ADMIN') navigate('/admin');
-      else navigate('/');
+      else navigate('/dashboard');
     } catch (err: any) {
       const msg = err?.response?.data?.message || err.message || 'Login failed';
       toast.error(msg);
@@ -92,9 +93,9 @@ export default function LoginPage() {
         <div className={styles.demoSection}>
           <span className={styles.demoLabel}>Demo Quick-Fill:</span>
           <div className={styles.demoButtons}>
-            <button type="button" className={styles.demoChip} onClick={() => quickFill('user@demo.com')}>👤 User</button>
-            <button type="button" className={styles.demoChip} onClick={() => quickFill('manager@demo.com')}>📊 Manager</button>
-            <button type="button" className={styles.demoChip} onClick={() => quickFill('admin@demo.com')}>👑 Admin</button>
+            <button type="button" className={styles.demoChip} onClick={() => quickFill('user@demo.com')}>User</button>
+            <button type="button" className={styles.demoChip} onClick={() => quickFill('manager@demo.com')}>Manager</button>
+            <button type="button" className={styles.demoChip} onClick={() => quickFill('admin@demo.com')}>Admin</button>
           </div>
         </div>
 
@@ -110,7 +111,7 @@ export default function LoginPage() {
             error={errors.password}
             rightIcon={
               <button type="button" className={styles.togglePassBtn} onClick={() => setShowPassword(!showPassword)} tabIndex={-1}>
-                {showPassword ? '👁️' : '🙈'}
+                {showPassword ? 'Hide' : 'Show'}
               </button>
             }
           />

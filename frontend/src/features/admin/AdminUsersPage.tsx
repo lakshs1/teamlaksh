@@ -101,7 +101,6 @@ export default function AdminUsersPage() {
           columns={columns}
           data={filtered}
           emptyMessage="No users found"
-          emptyIcon="👥"
         />
       )}
     </div>

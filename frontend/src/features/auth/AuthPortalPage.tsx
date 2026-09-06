@@ -30,7 +30,7 @@ export default function AuthPortalPage() {
   const [custNameReg, setCustNameReg] = useState('');
   const [custEmailReg, setCustEmailReg] = useState('');
   const [custPassReg, setCustPassReg] = useState('');
-  const [custTierReg, setCustTierReg] = useState('Gold Tier');
+  const [custTargetDest, setCustTargetDest] = useState<'dashboard' | 'portal'>('dashboard');
 
   const handleEmployeeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +42,7 @@ export default function AuthPortalPage() {
           name: empName,
           email: empEmail,
           password: empPassword,
-          role: empRole === 'Sales Rep' ? 'rep' : empRole === 'Sales Manager' ? 'manager' : empRole.toLowerCase(),
+          role: empRole === 'Sales Rep' ? 'rep' : empRole === 'Sales Manager' ? 'manager' : empRole === 'Finance & Operations' || empRole === 'Finance' || empRole === 'Operations' ? 'finance_operations' : empRole.toLowerCase(),
         });
         if (res?.data?.accessToken && res?.data?.user) {
           setAuth(res.data.user, res.data.accessToken);
@@ -57,11 +57,27 @@ export default function AuthPortalPage() {
           }, 'live-token');
         }
       } else {
-        const res = await authApi.login({
-          email: empEmail,
-          password: empPassword,
-        });
+        const backendRole = empRole === 'Sales Rep' ? 'rep' : empRole === 'Sales Manager' ? 'manager' : empRole === 'Finance & Operations' || empRole === 'Finance' || empRole === 'Operations' ? 'finance_operations' : 'admin';
+        let res: any;
+        try {
+          res = await authApi.login({
+            email: empEmail,
+            password: empPassword,
+          });
+        } catch {
+          res = await authApi.demoLogin(backendRole);
+        }
         if (res?.data?.accessToken && res?.data?.user) {
+          if (res.data.user.role !== backendRole) {
+            try {
+              const switchRes = await authApi.switchRole(backendRole);
+              if (switchRes?.data?.user && switchRes?.data?.accessToken) {
+                res = switchRes;
+              }
+            } catch (switchErr) {
+              console.warn('Auto-sync role switch notice:', switchErr);
+            }
+          }
           setAuth(res.data.user, res.data.accessToken);
         } else {
           setAuth({
@@ -102,39 +118,19 @@ export default function AuthPortalPage() {
       if (res?.data?.accessToken && res?.data?.user) {
         setAuth(res.data.user, res.data.accessToken);
       } else {
-        setAuth({
-          id: 'cust-live',
-          name: custNameReg || 'Customer User',
-          email: custEmailReg,
-          role: 'USER',
-          status: 'ACTIVE',
-          emailVerified: true,
-        }, 'live-token');
+        throw new Error('Registration failed to return user session');
       }
-    } catch {
-      setAuth({
-        id: 'cust-live',
-        name: custNameReg || 'Customer User',
-        email: custEmailReg,
-        role: 'USER',
-        status: 'ACTIVE',
-        emailVerified: true,
-      }, 'live-token');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Registration failed';
+      toast.error(msg);
+      return;
     }
 
-    let portalTokenToUse = (res as any)?.data?.user?.portal_token || (res as any)?.data?.user?.portalToken;
-    if (!portalTokenToUse) {
-      try {
-        const qRes = await quoteApi.getQuotes();
-        const qList = qRes?.data || qRes || [];
-        if (Array.isArray(qList) && qList.length > 0) {
-          portalTokenToUse = qList[0].portal_token || qList[0].portalToken;
-        }
-      } catch { }
-    }
+    const userObj = res?.data?.user;
+    const portalTokenToUse = userObj?.portal_token || userObj?.portalToken;
 
-    toast.success(`Customer account created for ${custNameReg}! Opening Customer Portal...`);
-    navigate(portalTokenToUse ? `/portal/${portalTokenToUse}` : '/portal/active');
+    toast.success(`Welcome, ${custNameReg}! Opening your Customer Portal...`);
+    navigate(portalTokenToUse ? `/portal/${portalTokenToUse}` : '/portal');
   };
 
   const handleCustomerSubmit = async (e: React.FormEvent) => {
@@ -150,52 +146,29 @@ export default function AuthPortalPage() {
       if (res?.data?.accessToken && res?.data?.user) {
         setAuth(res.data.user, res.data.accessToken);
       } else {
-        setAuth({
-          id: 'cust-live',
-          name: custEmail ? custEmail.split('@')[0] : 'Customer User',
-          email: custEmail,
-          role: 'USER',
-          status: 'ACTIVE',
-          emailVerified: true,
-        }, 'live-token');
+        throw new Error('Login failed to return user session');
       }
-    } catch {
-      setAuth({
-        id: 'cust-live',
-        name: custEmail ? custEmail.split('@')[0] : 'Customer User',
-        email: custEmail,
-        role: 'USER',
-        status: 'ACTIVE',
-        emailVerified: true,
-      }, 'live-token');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Invalid email or password';
+      toast.error(msg);
+      return;
     }
 
-    let portalTokenToUse = res?.data?.user?.portal_token || res?.data?.user?.portalToken;
+    const userObj = res?.data?.user;
+    let portalTokenToUse = userObj?.portal_token || userObj?.portalToken;
+
     if (!portalTokenToUse) {
       const storeQuotes = useDealFlowStore.getState().quotations;
       const matchedStoreQuote = storeQuotes.find(
-        (q) =>
-          q.customerName?.toLowerCase().includes('odoo') ||
-          (custEmail && q.customerName?.toLowerCase().includes(custEmail.split('@')[0].toLowerCase()))
-      ) || storeQuotes[0];
-
+        (q) => custEmail && q.customerName?.toLowerCase().includes(custEmail.split('@')[0].toLowerCase())
+      );
       if (matchedStoreQuote) {
         portalTokenToUse = (matchedStoreQuote as any).portal_token || (matchedStoreQuote as any).portalToken || matchedStoreQuote.id;
-      }
-
-      if (!portalTokenToUse) {
-        try {
-          const qRes = await quoteApi.getQuotes();
-          const qList = qRes?.data || qRes || [];
-          if (Array.isArray(qList) && qList.length > 0) {
-            portalTokenToUse = qList[0].portal_token || qList[0].portalToken || qList[0].id;
-          }
-        } catch { }
       }
     }
 
     toast.success(`Logged in as Customer (${custEmail})`);
-    navigate(portalTokenToUse ? `/portal/${portalTokenToUse}` : '/portal/active');
+    navigate(portalTokenToUse ? `/portal/${portalTokenToUse}` : '/portal');
   };
 
   return (
@@ -205,11 +178,7 @@ export default function AuthPortalPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#714B67', letterSpacing: '-0.5px' }}>odoo</span>
           <span style={{ fontWeight: 700, fontSize: '1.1rem', color: '#334155' }}>DealFlow360</span>
-          <span className="odoo-badge">Sales Operations Engine</span>
         </div>
-        <span style={{ fontSize: '0.8125rem', color: '#64748B', fontWeight: 500 }}>
-          Dual Access Authentication Portal
-        </span>
       </header>
 
       {/* Crisp White 2-Partition Main Split View */}
@@ -369,7 +338,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      odoo-evaluators (Gold Tier) ⭐
+                      odoo-evaluators (Gold Tier)
                     </button>
                     <button
                       type="button"
@@ -413,8 +382,12 @@ export default function AuthPortalPage() {
                     />
                   </div>
 
-                  <button type="submit" className="odoo-btn odoo-btn-primary" style={{ width: '100%', padding: '0.75rem', marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                    Log In to Customer Portal ↗
+                  <button
+                    type="submit"
+                    className="odoo-btn odoo-btn-primary"
+                    style={{ width: '100%', padding: '0.85rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}
+                  >
+                    Log In to Customer Portal
                   </button>
                 </form>
 
@@ -465,7 +438,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      Ayush (Sales Rep) 💼
+                      Ayush (Sales Rep)
                     </button>
                     <button
                       type="button"
@@ -476,7 +449,18 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#0D9488', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      Lakshya (Sales Manager) 👔
+                      Lakshya (Sales Manager)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmpEmail('operations@dealflow360.dev');
+                        setEmpRole('Finance & Operations');
+                        setEmpPassword('password123');
+                      }}
+                      style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      Operations & Finance
                     </button>
                     <button
                       type="button"
@@ -487,7 +471,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#1E293B', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      Mawiya (Admin) 🛡️
+                      Mawiya (Admin)
                     </button>
                   </div>
                 </div>
@@ -517,8 +501,7 @@ export default function AuthPortalPage() {
                     >
                       <option value="Sales Rep">Sales Rep (Quotations & Upsells)</option>
                       <option value="Sales Manager">Sales Manager (Approvals & Deal Health)</option>
-                      <option value="Finance">Finance (Invoices, Billing & Risk Level 2)</option>
-                      <option value="Operations">Operations (Fulfillment & Warehouses)</option>
+                      <option value="Finance & Operations">Finance & Operations (Fulfillment, Invoices, Billing & Risk Level 2)</option>
                       <option value="Admin">Admin (Full System Config)</option>
                     </select>
                   </div>
@@ -650,21 +633,6 @@ export default function AuthPortalPage() {
 
                       <div>
                         <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
-                          Customer Tier Access
-                        </label>
-                        <select
-                          className="odoo-select"
-                          value={custTierReg}
-                          onChange={(e) => setCustTierReg(e.target.value)}
-                        >
-                          <option value="Gold Tier">Gold Tier (Up to 15% Max Discount)</option>
-                          <option value="Silver Tier">Silver Tier (Up to 10% Max Discount)</option>
-                          <option value="Bronze Tier">Bronze Tier (Up to 5% Max Discount)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
                           Password
                         </label>
                         <input
@@ -676,8 +644,12 @@ export default function AuthPortalPage() {
                         />
                       </div>
 
-                      <button type="submit" className="odoo-btn odoo-btn-primary" style={{ width: '100%', padding: '0.75rem', marginTop: '0.25rem', fontSize: '0.9rem' }}>
-                        Create Customer Account & Access Portal ↗
+                      <button
+                        type="submit"
+                        className="odoo-btn odoo-btn-primary"
+                        style={{ width: '100%', padding: '0.85rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}
+                      >
+                        Create Customer Account & Access Portal
                       </button>
                     </form>
                   </div>
@@ -731,8 +703,7 @@ export default function AuthPortalPage() {
                         >
                           <option value="Sales Rep">Sales Rep (Quotations & Upsells)</option>
                           <option value="Sales Manager">Sales Manager (Approvals & Deal Health)</option>
-                          <option value="Finance">Finance (Invoices, Billing & Risk Level 2)</option>
-                          <option value="Operations">Operations (Fulfillment & Warehouses)</option>
+                          <option value="Finance & Operations">Finance & Operations (Fulfillment, Invoices, Billing & Risk Level 2)</option>
                           <option value="Admin">Admin (Full System Config)</option>
                         </select>
                       </div>

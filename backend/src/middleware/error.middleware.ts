@@ -35,7 +35,8 @@ export function errorHandler(
   }
 
   // ── ApiError (our custom errors) ─────────────────────────
-  if (err instanceof ApiError) {
+  if (err instanceof ApiError || ("statusCode" in err && typeof (err as any).statusCode === "number")) {
+    const statusCode = (err as any).statusCode || 500;
     // Check if message is a JSON string (from validate middleware)
     let body: any;
     try {
@@ -44,7 +45,7 @@ export function errorHandler(
       body = { message: err.message };
     }
 
-    res.status(err.statusCode).json({
+    res.status(statusCode).json({
       success: false,
       ...body,
     });

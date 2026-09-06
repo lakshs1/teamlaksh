@@ -45,9 +45,10 @@ export default function RegisterPage() {
       toast.success('Account created successfully!');
       setAuth(user, token);
 
-      if (user.role === 'MANAGER') navigate('/dashboard');
+      if (user.role === 'customer') navigate('/portal');
+      else if (user.role === 'MANAGER') navigate('/dashboard');
       else if (user.role === 'ADMIN') navigate('/admin');
-      else navigate('/');
+      else navigate('/dashboard');
     } catch (err: any) {
       const msg = err?.response?.data?.message || err.message || 'Registration failed';
       toast.error(msg);

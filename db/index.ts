@@ -15,8 +15,8 @@ const connectionString =
 
 // Connection pool for queries
 export const queryClient = postgres(connectionString, {
-  max: 10,
-  idle_timeout: 20,
+  max: 15,
+  idle_timeout: 300,
   connect_timeout: 30,
 });
 

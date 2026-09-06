@@ -29,30 +29,35 @@ export default function SalesDashboardPage() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [salesRes, approvalsRes, quotesRes, alertsRes] = await Promise.all([
+        const [salesRes, approvalsRes, quotesRes, alertsRes] = await Promise.allSettled([
           analyticsApi.getSalesReport(),
           approvalApi.getPendingApprovals(),
           quoteApi.getQuotes(),
           analyticsApi.getAlerts()
         ]);
 
-        const salesChartData = salesRes.data?.trendData || DEFAULT_SALES_DATA;
+        const salesDataVal = salesRes.status === 'fulfilled' ? salesRes.value : null;
+        const approvalsVal = approvalsRes.status === 'fulfilled' ? approvalsRes.value : null;
+        const quotesVal = quotesRes.status === 'fulfilled' ? quotesRes.value : null;
+        const alertsVal = alertsRes.status === 'fulfilled' ? alertsRes.value : null;
+
+        const salesChartData = salesDataVal?.data?.trendData || DEFAULT_SALES_DATA;
         setSalesData(salesChartData.map((d: any) => ({
           month: d.label || d.month,
           sales: typeof d.sales === 'number' ? d.sales : (d.value || 0) / 1000 // Convert to K if needed, or keep as is.
         })));
 
-        const approvals = approvalsRes.data?.items || approvalsRes.data || [];
+        const approvals = approvalsVal?.data?.items || approvalsVal?.data || [];
         setPendingApprovalsCount(approvals.filter((a: any) => a.status === 'Pending' || a.status === 'pending').length || approvals.length);
 
-        const quotes = quotesRes.data?.items || quotesRes.data || [];
-        setActiveQuotesCount(quotesRes.data?.total || quotes.length);
+        const quotes = quotesVal?.data?.items || quotesVal?.data || [];
+        setActiveQuotesCount(quotesVal?.data?.total || quotes.length);
 
-        const alerts = alertsRes.data?.items || alertsRes.data || [];
+        const alerts = alertsVal?.data?.items || alertsVal?.data || [];
         setRiskDealsCount(alerts.length);
 
       } catch (err: any) {
-        toast.error(err.message || 'Failed to load sales dashboard');
+        console.warn('Dashboard fetch warning:', err);
       } finally {
         setLoading(false);
       }

@@ -282,3 +282,168 @@ registry.registerPath({
     },
   },
 });
+
+// ═══════════════════════════════════════════════════════════
+// SUBSCRIPTION PLAN SCHEMAS (PRD Section A5)
+// ═══════════════════════════════════════════════════════════
+
+export const createSubscriptionPlanSchema = z
+  .object({
+    name: z.string().min(1, "Plan name is required").openapi({ example: "Pro Monthly SaaS" }),
+    code: z.string().optional().openapi({ example: "PRO-M" }),
+    description: z.string().optional().openapi({ example: "Full access license billed monthly" }),
+    product_id: z.coerce.number().int().positive().optional().openapi({ example: 5 }),
+    interval: z.enum(["monthly", "quarterly", "yearly"]).default("monthly").openapi({ example: "monthly" }),
+    base_price: z.coerce.number().min(0, "Base price must be >= 0").openapi({ example: 99.0 }),
+    cost_price: z.coerce.number().min(0).default(0).openapi({ example: 20.0 }),
+    proration_rule: z.enum(["exact_day", "full_period", "no_proration"]).default("exact_day").openapi({ example: "exact_day" }),
+    allow_mid_cycle_changes: z.boolean().default(true).openapi({ example: true }),
+    cancellation_policy: z.enum(["prorated_refund", "end_of_cycle", "no_refund"]).default("prorated_refund").openapi({ example: "prorated_refund" }),
+    refund_percentage: z.coerce.number().min(0).max(100).default(100).openapi({ example: 100 }),
+    notice_period_days: z.coerce.number().int().min(0).default(0).openapi({ example: 0 }),
+    is_active: z.boolean().default(true).openapi({ example: true }),
+  })
+  .openapi("CreateSubscriptionPlanRequest");
+
+export const updateSubscriptionPlanSchema = createSubscriptionPlanSchema.partial().openapi("UpdateSubscriptionPlanRequest");
+
+export const subscriptionPlanResponseSchema = z
+  .object({
+    id: z.number().int(),
+    name: z.string(),
+    code: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    product_id: z.number().int().nullable().optional(),
+    product_name: z.string().nullable().optional(),
+    interval: z.string(),
+    base_price: z.number(),
+    cost_price: z.number(),
+    proration_rule: z.string(),
+    allow_mid_cycle_changes: z.boolean(),
+    cancellation_policy: z.string(),
+    refund_percentage: z.number(),
+    notice_period_days: z.number(),
+    is_active: z.boolean(),
+    created_at: z.coerce.date(),
+    updated_at: z.coerce.date(),
+  })
+  .openapi("SubscriptionPlanResponse");
+
+registry.registerPath({
+  method: "get",
+  path: "/billing/plans",
+  tags: ["Billing"],
+  summary: "List defined recurring subscription plans",
+  security: [{ BearerAuth: [] }],
+  responses: {
+    200: {
+      description: "List of subscription plans",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.literal(true),
+            data: z.array(subscriptionPlanResponseSchema),
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/billing/plans",
+  tags: ["Billing"],
+  summary: "Create a new recurring subscription plan",
+  security: [{ BearerAuth: [] }],
+  request: {
+    body: {
+      content: { "application/json": { schema: createSubscriptionPlanSchema } },
+    },
+  },
+  responses: {
+    201: {
+      description: "Created subscription plan",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.literal(true),
+            data: subscriptionPlanResponseSchema,
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/billing/plans/{id}",
+  tags: ["Billing"],
+  summary: "Get subscription plan by ID",
+  security: [{ BearerAuth: [] }],
+  parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+  responses: {
+    200: {
+      description: "Subscription plan details",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.literal(true),
+            data: subscriptionPlanResponseSchema,
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/billing/plans/{id}",
+  tags: ["Billing"],
+  summary: "Update subscription plan",
+  security: [{ BearerAuth: [] }],
+  parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+  request: {
+    body: {
+      content: { "application/json": { schema: updateSubscriptionPlanSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: "Updated subscription plan",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.literal(true),
+            data: subscriptionPlanResponseSchema,
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/billing/plans/{id}",
+  tags: ["Billing"],
+  summary: "Delete subscription plan",
+  security: [{ BearerAuth: [] }],
+  parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+  responses: {
+    200: {
+      description: "Subscription plan deleted",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.literal(true),
+            message: z.string(),
+          }),
+        },
+      },
+    },
+  },
+});
+

@@ -4,12 +4,12 @@ import { Card } from '../../components/ui/Card';
 import styles from './HomePage.module.css';
 
 const FEATURES = [
-  { icon: '⚡', title: 'Lightning Fast', desc: 'Built on Vite with instant HMR and optimized builds.' },
-  { icon: '🎨', title: 'Design System', desc: 'CSS custom properties for instant theme switching.' },
-  { icon: '🔒', title: 'Auth Ready', desc: 'Role-based routing with guards, JWT tokens, and persistent sessions.' },
-  { icon: '📊', title: 'Dashboard', desc: 'Pre-built admin and user dashboards with charts and data tables.' },
-  { icon: '🧩', title: 'Component Library', desc: 'Button, Card, Input, Modal, Badge, Tabs, DataTable, and more.' },
-  { icon: '🐳', title: 'Docker Ready', desc: 'Multi-stage Dockerfile with nginx for production deployment.' },
+  { title: 'Lightning Fast', desc: 'Built on Vite with instant HMR and optimized builds.' },
+  { title: 'Design System', desc: 'CSS custom properties for instant theme switching.' },
+  { title: 'Auth Ready', desc: 'Role-based routing with guards, JWT tokens, and persistent sessions.' },
+  { title: 'Dashboard', desc: 'Pre-built admin and user dashboards with charts and data tables.' },
+  { title: 'Component Library', desc: 'Button, Card, Input, Modal, Badge, Tabs, DataTable, and more.' },
+  { title: 'Docker Ready', desc: 'Multi-stage Dockerfile with nginx for production deployment.' },
 ];
 
 export default function HomePage() {
@@ -45,7 +45,6 @@ export default function HomePage() {
         <div className={styles.featureGrid}>
           {FEATURES.map((f) => (
             <Card key={f.title} variant="bordered" padding="md" className={styles.featureCard}>
-              <span className={styles.featureIcon}>{f.icon}</span>
               <h3 className={styles.featureTitle}>{f.title}</h3>
               <p className={styles.featureDesc}>{f.desc}</p>
             </Card>
