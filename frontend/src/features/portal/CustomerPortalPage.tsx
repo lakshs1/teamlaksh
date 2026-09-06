@@ -24,7 +24,7 @@ export default function CustomerPortalPage() {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch { }
+    } catch {}
     return portalMessages;
   });
 
@@ -139,8 +139,8 @@ export default function CustomerPortalPage() {
           data.status === 'pending_manager' || data.status === 'pending_finance'
             ? 'Pending Approval'
             : data.status === 'fulfillment'
-              ? 'Confirmed'
-              : data.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Sent';
+            ? 'Confirmed'
+            : data.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Sent';
 
         const rawSubtotal = Number(data.subtotal || data.untaxed_amount || 0);
         const rawDiscount = Number(data.total_discount || data.discount_amount || 0);
@@ -152,28 +152,28 @@ export default function CustomerPortalPage() {
           data.discount_pct !== undefined && data.discount_pct !== null && Number(data.discount_pct) > 0
             ? Number(data.discount_pct)
             : rawSubtotal > 0 && rawDiscount > 0
-              ? Number(((rawDiscount / rawSubtotal) * 100).toFixed(1))
-              : rawLines.length > 0 && rawLines.some((l: any) => Number(l.discount_pct || l.discountPct || l.discount || 0) > 0)
-                ? Number(
-                  (
+            ? Number(((rawDiscount / rawSubtotal) * 100).toFixed(1))
+            : rawLines.length > 0 && rawLines.some((l: any) => Number(l.discount_pct || l.discountPct || l.discount || 0) > 0)
+            ? Number(
+                (
+                  rawLines.reduce(
+                    (acc: number, l: any) =>
+                      acc +
+                      Number(l.discount_pct || l.discountPct || l.discount || 0) *
+                        (Number(l.unit_price || l.unitPrice || 0) * Number(l.quantity || 1)),
+                    0
+                  ) /
+                  Math.max(
+                    1,
                     rawLines.reduce(
                       (acc: number, l: any) =>
-                        acc +
-                        Number(l.discount_pct || l.discountPct || l.discount || 0) *
-                        (Number(l.unit_price || l.unitPrice || 0) * Number(l.quantity || 1)),
+                        acc + Number(l.unit_price || l.unitPrice || 0) * Number(l.quantity || 1),
                       0
-                    ) /
-                    Math.max(
-                      1,
-                      rawLines.reduce(
-                        (acc: number, l: any) =>
-                          acc + Number(l.unit_price || l.unitPrice || 0) * Number(l.quantity || 1),
-                        0
-                      )
                     )
-                  ).toFixed(1)
-                )
-                : 0;
+                  )
+                ).toFixed(1)
+              )
+            : 0;
 
         setLiveQuote({
           ...data,
@@ -213,7 +213,7 @@ export default function CustomerPortalPage() {
             if (data.id) {
               localStorage.setItem(`dealflow_portal_chat_${data.id}`, JSON.stringify(mappedMsgs));
             }
-          } catch { }
+          } catch {}
         }
       }
     } catch (err: any) {
@@ -278,7 +278,7 @@ export default function CustomerPortalPage() {
     const tokenToUse = liveQuote?.portal_token || activeToken || 'active';
     try {
       localStorage.setItem(`dealflow_portal_chat_${tokenToUse}`, JSON.stringify(updated));
-    } catch { }
+    } catch {}
 
     try {
       await portalApi.postComment(tokenToUse, {
@@ -326,8 +326,8 @@ export default function CustomerPortalPage() {
     const messageText = counterNote.trim()
       ? counterNote.trim()
       : isRepCounter
-        ? `Sales Team counter-proposal: Offering ${counterVal}% discount on order lines.`
-        : `Counter-proposal submitted: Requesting ${counterVal}% discount on order lines.`;
+      ? `Sales Team counter-proposal: Offering ${counterVal}% discount on order lines.`
+      : `Counter-proposal submitted: Requesting ${counterVal}% discount on order lines.`;
 
     const counterProposalMsg: PortalChatMessage = {
       id: `msg-${Date.now()}`,
@@ -345,7 +345,7 @@ export default function CustomerPortalPage() {
 
     try {
       localStorage.setItem(`dealflow_portal_chat_${tokenToUse}`, JSON.stringify(updatedWithCounter));
-    } catch { }
+    } catch {}
 
     toast.success(
       isRepCounter
@@ -603,57 +603,6 @@ export default function CustomerPortalPage() {
             </div>
           ) : (
             <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-              {/* 1. Staff Mode Banner: Rep / Manager accessing portal */}
-              {isStaff && (
-                <div
-                  style={{
-                    backgroundColor: '#EFF6FF',
-                    border: '1px solid #BFDBFE',
-                    borderRadius: 10,
-                    padding: '0.85rem 1.25rem',
-                    marginBottom: '1.25rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <span style={{ fontSize: '1.2rem' }}>👁️</span>
-                    <div>
-                      <div style={{ fontWeight: 700, color: '#1E40AF', fontSize: '0.875rem' }}>
-                        Sales Team Portal Preview Mode ({user?.name || 'Sales Rep'} • {user?.role || 'Staff'})
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: '#3B82F6' }}>
-                        You are viewing the interactive customer portal. You can negotiate and propose counter-offers directly to the customer.
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <button
-                      className="odoo-btn odoo-btn-primary"
-                      onClick={() => {
-                        setCounterType('rep');
-                        setCounterDiscount('5');
-                        setShowCounterModal(true);
-                      }}
-                      style={{ fontSize: '0.8125rem', padding: '0.4rem 0.85rem' }}
-                    >
-                      ⚡ Propose Counter-Offer to Customer
-                    </button>
-                    {liveQuote?.id && (
-                      <button
-                        className="odoo-btn odoo-btn-secondary"
-                        onClick={() => navigate(`/quotations/${liveQuote.id}`)}
-                        style={{ fontSize: '0.8125rem', padding: '0.4rem 0.85rem' }}
-                      >
-                        ← Back to Quotation Details
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* 2. Customer Action Banner: Sales Rep proposed a counter-offer */}
               {!isStaff && isLatestFromRep && latestCounterMsg && (
@@ -701,447 +650,421 @@ export default function CustomerPortalPage() {
                 </div>
               )}
 
-              {/* 3. Customer Status Notice: Customer submitted counter-offer, awaiting rep/manager response */}
               {/* 3. Customer Status Notice: Counter-Offer Lifecycle */}
               {!isStaff && isLatestFromCust && latestCounterMsg && (
-                <div
-                  style={{
-                    backgroundColor: '#FFFBEB',
-                    border: '1px solid #FCD34D',
-                    borderRadius: 10,
-                    padding: '0.85rem 1.25rem',
-                    marginBottom: '1.25rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '0.5rem',
-                  }}
-                >
-                  <div style={{ fontSize: '0.8125rem', color: '#92400E' }}>
-                    ⏳ Your counter-proposal requesting <strong>{latestCounterMsg.counterDiscountPct}% discount</strong> is currently pending review by your Sales Representative / Manager.
-                    liveQuote?.status === 'approved' ? (
-                    <div
-                      style={{
-                        backgroundColor: '#F0FDF4',
-                        border: '1px solid #86EFAC',
-                        borderRadius: 10,
-                        padding: '1rem 1.25rem',
-                        marginBottom: '1.25rem',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: '0.75rem',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          <span>✅</span> Counter-Offer Approved! Sales Team Accepted Your {latestCounterMsg.counterDiscountPct}% Discount
-                        </div>
-                        <div style={{ fontSize: '0.8125rem', color: '#15803D', marginTop: '0.25rem' }}>
-                          Your requested concession has been applied to this quotation. Accept below to proceed to order fulfillment.
-                        </div>
+                liveQuote?.status === 'approved' ? (
+                  <div
+                    style={{
+                      backgroundColor: '#F0FDF4',
+                      border: '1px solid #86EFAC',
+                      borderRadius: 10,
+                      padding: '1rem 1.25rem',
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>✅</span> Counter-Offer Approved! Sales Team Accepted Your {latestCounterMsg.counterDiscountPct}% Discount
                       </div>
-                      <button
-                        className="odoo-btn odoo-btn-primary"
-                        onClick={handleAcceptOffer}
-                        style={{ backgroundColor: '#15803D', borderColor: '#15803D', fontWeight: 700 }}
-                      >
-                        ✓ Accept Quotation Terms
-                      </button>
+                      <div style={{ fontSize: '0.8125rem', color: '#15803D', marginTop: '0.25rem' }}>
+                        Your requested concession has been applied to this quotation. Accept below to proceed to order fulfillment.
+                      </div>
+                    </div>
+                    <button
+                      className="odoo-btn odoo-btn-primary"
+                      onClick={handleAcceptOffer}
+                      style={{ backgroundColor: '#15803D', borderColor: '#15803D', fontWeight: 700 }}
+                    >
+                      ✓ Accept Quotation Terms
+                    </button>
+                  </div>
+                ) : (liveQuote?.status === 'fulfillment' || liveQuote?.status === 'confirmed' || liveQuote?.status === 'invoiced') ? (
+                  <div
+                    style={{
+                      backgroundColor: '#EFF6FF',
+                      border: '1px solid #93C5FD',
+                      borderRadius: 10,
+                      padding: '0.85rem 1.25rem',
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.6rem',
+                    }}
+                  >
+                    <span style={{ fontSize: '1.2rem' }}>📦</span>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#1D4ED8', fontSize: '0.875rem' }}>
+                        Order Confirmed & In Fulfillment
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#2563EB' }}>
+                        This quotation terms were confirmed and converted into an active fulfillment order.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      backgroundColor: '#FFFBEB',
+                      border: '1px solid #FCD34D',
+                      borderRadius: 10,
+                      padding: '0.85rem 1.25rem',
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.8125rem', color: '#92400E' }}>
+                      ⏳ Your counter-proposal requesting <strong>{latestCounterMsg.counterDiscountPct}% discount</strong> is currently pending review by your Sales Representative / Manager.
                     </div>
                     <button
                       className="odoo-btn odoo-btn-secondary"
                       onClick={() => {
                         setCounterType('customer');
                         setShowCounterModal(true);
-                ) : (liveQuote?.status === 'fulfillment' || liveQuote?.status === 'confirmed' || liveQuote?.status === 'invoiced') ? (
-                    <div
-                      style={{
-                        backgroundColor: '#EFF6FF',
-                        border: '1px solid #93C5FD',
-                        borderRadius: 10,
-                        padding: '0.85rem 1.25rem',
-                        marginBottom: '1.25rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.6rem',
                       }}
                       style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
                     >
                       Adjust Counter
                     </button>
                   </div>
-                  <span style={{ fontSize: '1.2rem' }}>📦</span>
-                  <div>
-                    <div style={{ fontWeight: 700, color: '#1D4ED8', fontSize: '0.875rem' }}>
-                      Order Confirmed & In Fulfillment
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#2563EB' }}>
-                      This quotation terms were confirmed and converted into an active fulfillment order.
-                    </div>
-                  </div>
-                </div>
-              ) : (
-              <div
-                style={{
-                  backgroundColor: '#FFFBEB',
-                  border: '1px solid #FCD34D',
-                  borderRadius: 10,
-                  padding: '0.85rem 1.25rem',
-                  marginBottom: '1.25rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '0.5rem',
-                }}
-              >
-                <div style={{ fontSize: '0.8125rem', color: '#92400E' }}>
-                  ⏳ Your counter-proposal requesting <strong>{latestCounterMsg.counterDiscountPct}% discount</strong> is currently pending review by your Sales Representative / Manager.
-                </div>
-                <button
-                  className="odoo-btn odoo-btn-secondary"
-                  onClick={() => {
-                    setCounterType('customer');
-                    setShowCounterModal(true);
-                  }}
-                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
-                >
-                  Adjust Counter
-                </button>
-              </div>
-              )
+                )
               )}
 
               {/* Main Quotation Grid: Chat / Negotiation left, Summary right */}
               <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem' }}>
                 {/* Left Chat / Messages & Line Items */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  {/* Live Quotation Products Card */}
-                  <div className="odoo-card">
-                    <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '0.75rem' }}>
-                      Quotation Line Items & Available Products
-                    </h3>
-                    {loading ? (
-                      <div style={{ padding: '2rem', textAlign: 'center', color: '#64748B', fontSize: '0.875rem' }}>
-                        Fetching live backend data...
-                      </div>
-                    ) : quoteLines.length === 0 ? (
-                      <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#F8F9FA', borderRadius: 8, border: '1px dashed #CBD5E1' }}>
-                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>
-                          No Products Registered
-                        </div>
-                        <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>
-                          No quotation lines are registered for this reference.
-                        </p>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                        {quoteLines.map((line: any, idx: number) => {
-                          const lineQty = Number(line.quantity || 1);
-                          const lineUnitPrice = Number(line.unit_price || line.unitPrice || 0);
-                          const lineDiscPct = Number(line.discount_pct ?? line.discountPct ?? line.discount ?? 0);
-                          const lineGross = lineQty * lineUnitPrice;
-                          const lineDiscAmt = Number(line.discount_amount || line.discountAmount || (lineGross * (lineDiscPct / 100)));
-                          const lineNet = Number(line.line_total || line.total || (lineGross - lineDiscAmt));
-
-                          return (
-                            <div
-                              key={line.id || idx}
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '0.85rem 1rem',
-                                background: '#F8FAFC',
-                                borderRadius: 8,
-                                border: '1px solid #E2E8F0',
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1F2937' }}>
-                                  {line.product_name || line.productName || 'Item'}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
-                                  <span>Qty: {lineQty} • Unit Price: ₹{lineUnitPrice.toLocaleString()}</span>
-                                  {lineDiscPct > 0 && (
-                                    <span
-                                      style={{
-                                        backgroundColor: '#DCFCE7',
-                                        color: '#15803D',
-                                        padding: '0.1rem 0.45rem',
-                                        borderRadius: 4,
-                                        fontWeight: 600,
-                                        fontSize: '0.7rem',
-                                      }}
-                                    >
-                                      {lineDiscPct}% off (-₹{Math.round(lineDiscAmt).toLocaleString()})
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#714B67' }}>
-                                  ₹{Math.round(lineNet).toLocaleString()}
-                                </div>
-                                {lineDiscPct > 0 && (
-                                  <div style={{ fontSize: '0.75rem', color: '#94A3B8', textDecoration: 'line-through' }}>
-                                    ₹{Math.round(lineGross).toLocaleString()}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Chat Card: Live Line-Item Negotiation */}
-                  <div className="odoo-card" style={{ display: 'flex', flexDirection: 'column', height: 420 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <div>
-                        <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', margin: 0 }}>
-                          Live Line-Item Negotiation
-                        </h3>
-                        <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0.2rem 0 0 0' }}>
-                          Ask line level questions or request counter discounts directly with your sales manager
-                        </p>
-                      </div>
-                      <span className="odoo-badge" style={{ backgroundColor: '#F1F5F9', color: '#475569', fontSize: '0.7rem' }}>
-                        {displayMessages.length} messages
-                      </span>
+                {/* Live Quotation Products Card */}
+                <div className="odoo-card">
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '0.75rem' }}>
+                    Quotation Line Items & Available Products
+                  </h3>
+                  {loading ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', color: '#64748B', fontSize: '0.875rem' }}>
+                      Fetching live backend data...
                     </div>
+                  ) : quoteLines.length === 0 ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#F8F9FA', borderRadius: 8, border: '1px dashed #CBD5E1' }}>
+                      <div style={{ fontSize: '1rem', fontWeight: 700, color: '#475569', marginBottom: '0.25rem' }}>
+                        No Products Registered
+                      </div>
+                      <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>
+                        No quotation lines are registered for this reference.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                      {quoteLines.map((line: any, idx: number) => {
+                        const lineQty = Number(line.quantity || 1);
+                        const lineUnitPrice = Number(line.unit_price || line.unitPrice || 0);
+                        const lineDiscPct = Number(line.discount_pct ?? line.discountPct ?? line.discount ?? 0);
+                        const lineGross = lineQty * lineUnitPrice;
+                        const lineDiscAmt = Number(line.discount_amount || line.discountAmount || (lineGross * (lineDiscPct / 100)));
+                        const lineNet = Number(line.line_total || line.total || (lineGross - lineDiscAmt));
 
-                    {/* Messages Area */}
-                    <div
-                      style={{
-                        flex: 1,
-                        overflowY: 'auto',
-                        padding: '0.75rem',
-                        background: '#FFFFFF',
-                        borderRadius: 8,
-                        border: '1px solid #E2E8F0',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.75rem',
-                        marginBottom: '0.75rem',
-                      }}
-                    >
-                      {displayMessages.length === 0 ? (
-                        <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: '0.8125rem', marginTop: 'auto', marginBottom: 'auto' }}>
-                          No messages yet. Type below to start live negotiation.
-                        </div>
-                      ) : (
-                        displayMessages.map((m) => {
-                          const isMe = isStaff
-                            ? (m.sender === 'Sales Rep' || m.authorType === 'rep')
-                            : (m.sender === 'Customer' || m.authorType === 'customer');
-                          const hasDiscount = m.counterDiscountPct !== undefined && m.counterDiscountPct !== null && m.counterDiscountPct > 0;
-                          return (
-                            <div
-                              key={m.id}
-                              style={{
-                                alignSelf: isMe ? 'flex-end' : 'flex-start',
-                                maxWidth: '78%',
-                                backgroundColor: isMe ? '#714B67' : hasDiscount ? '#FFFBEB' : '#F1F5F9',
-                                border: hasDiscount ? '1px solid #FCD34D' : 'none',
-                                color: isMe ? '#FFFFFF' : '#1F2937',
-                                padding: '0.65rem 0.9rem',
-                                borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                                fontSize: '0.8125rem',
-                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                              }}
-                            >
-                              <div style={{ fontSize: '0.7rem', opacity: isMe ? 0.9 : 0.75, marginBottom: '0.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                                <span>{m.senderName}</span>
-                                {hasDiscount && (
-                                  <span style={{ backgroundColor: '#F59E0B', color: '#FFF', padding: '0.1rem 0.35rem', borderRadius: 4, fontSize: '0.65rem' }}>
-                                    Counter: {m.counterDiscountPct}%
+                        return (
+                          <div
+                            key={line.id || idx}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '0.85rem 1rem',
+                              background: '#F8FAFC',
+                              borderRadius: 8,
+                              border: '1px solid #E2E8F0',
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1F2937' }}>
+                                {line.product_name || line.productName || 'Item'}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                                <span>Qty: {lineQty} • Unit Price: ₹{lineUnitPrice.toLocaleString()}</span>
+                                {lineDiscPct > 0 && (
+                                  <span
+                                    style={{
+                                      backgroundColor: '#DCFCE7',
+                                      color: '#15803D',
+                                      padding: '0.1rem 0.45rem',
+                                      borderRadius: 4,
+                                      fontWeight: 600,
+                                      fontSize: '0.7rem',
+                                    }}
+                                  >
+                                    {lineDiscPct}% off (-₹{Math.round(lineDiscAmt).toLocaleString()})
                                   </span>
                                 )}
-                                <span>{m.timestamp}</span>
                               </div>
-                              <div style={{ wordBreak: 'break-word', lineHeight: 1.4 }}>{m.text}</div>
                             </div>
-                          );
-                        })
-                      )}
-                      <div ref={messagesEndRef} />
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#714B67' }}>
+                                ₹{Math.round(lineNet).toLocaleString()}
+                              </div>
+                              {lineDiscPct > 0 && (
+                                <div style={{ fontSize: '0.75rem', color: '#94A3B8', textDecoration: 'line-through' }}>
+                                  ₹{Math.round(lineGross).toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-
-                    {/* Input form */}
-                    <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.5rem' }}>
-                      <input
-                        type="text"
-                        className="odoo-input"
-                        placeholder={isStaff ? "Type a reply or counter note to customer..." : "Type a message or negotiation note..."}
-                        value={inputMsg}
-                        onChange={(e) => setInputMsg(e.target.value)}
-                        disabled={isSending}
-                        style={{ flex: 1, fontSize: '0.8125rem', padding: '0.5rem 0.75rem' }}
-                      />
-                      <button
-                        type="submit"
-                        className="odoo-btn odoo-btn-primary"
-                        disabled={isSending || !inputMsg.trim()}
-                        style={{ padding: '0.5rem 1rem', fontSize: '0.8125rem' }}
-                      >
-                        {isSending ? 'Sending...' : 'Send'}
-                      </button>
-                    </form>
-                  </div>
+                  )}
                 </div>
 
-                {/* Right Column: Terms & Actions */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  <div className="odoo-card">
-                    <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '1rem' }}>
-                      Current Offer Terms
-                    </h3>
+                {/* Chat Card: Live Line-Item Negotiation */}
+                <div className="odoo-card" style={{ display: 'flex', flexDirection: 'column', height: 420 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <div>
+                      <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', margin: 0 }}>
+                        Live Line-Item Negotiation
+                      </h3>
+                      <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0.2rem 0 0 0' }}>
+                        Ask line level questions or request counter discounts directly with your sales manager
+                      </p>
+                    </div>
+                    <span className="odoo-badge" style={{ backgroundColor: '#F1F5F9', color: '#475569', fontSize: '0.7rem' }}>
+                      {displayMessages.length} messages
+                    </span>
+                  </div>
 
-                    {(() => {
-                      const quoteSubtotal = Number(liveQuote?.subtotal || liveQuote?.untaxed_amount || 0);
-                      const quoteDiscountAmt = Number(liveQuote?.total_discount || liveQuote?.discount_amount || 0);
-                      const quoteTaxAmt = Number(liveQuote?.total_tax || liveQuote?.tax_amount || 0);
-                      const quoteGrandTotal = Number(
-                        liveQuote?.grand_total || liveQuote?.total_amount || (quoteSubtotal - quoteDiscountAmt + quoteTaxAmt)
-                      );
-
-                      const lineAvgDiscount =
-                        quoteLines.length > 0
-                          ? quoteLines.reduce((acc: number, l: any) => acc + Number(l.discount_pct || l.discountPct || l.discount || 0), 0) /
-                          quoteLines.length
-                          : 0;
-
-                      const effectiveDiscountPct = Number(
-                        liveQuote?.discount_pct !== undefined && liveQuote?.discount_pct !== null && Number(liveQuote.discount_pct) > 0
-                          ? liveQuote.discount_pct
-                          : quoteSubtotal > 0 && quoteDiscountAmt > 0
-                            ? ((quoteDiscountAmt / quoteSubtotal) * 100).toFixed(1)
-                            : lineAvgDiscount > 0
-                              ? lineAvgDiscount.toFixed(1)
-                              : 0
-                      );
-
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                          {quoteSubtotal > 0 && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#64748B' }}>Gross Subtotal:</span>
-                              <span style={{ fontWeight: 600, color: '#475569' }}>
-                                ₹{Math.round(quoteSubtotal).toLocaleString()}
-                              </span>
-                            </div>
-                          )}
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: '#64748B' }}>Applied Discount:</span>
-                            <span
-                              style={{
-                                fontWeight: 700,
-                                color: effectiveDiscountPct > 0 ? '#059669' : '#64748B',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                flexWrap: 'wrap',
-                                justifyContent: 'flex-end',
-                              }}
-                            >
-                              {effectiveDiscountPct > 0 ? (
-                                <>
-                                  <span style={{ backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.1rem 0.4rem', borderRadius: 4, fontSize: '0.75rem' }}>
-                                    {effectiveDiscountPct}% OFF
-                                  </span>
-                                  {quoteDiscountAmt > 0 && <span>(-₹{Math.round(quoteDiscountAmt).toLocaleString()})</span>}
-                                </>
-                              ) : (
-                                '0%'
-                              )}
-                            </span>
-                          </div>
-
-                          {quoteTaxAmt > 0 && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#64748B' }}>Estimated Tax (18%):</span>
-                              <span style={{ fontWeight: 600, color: '#475569' }}>
-                                +₹{Math.round(quoteTaxAmt).toLocaleString()}
-                              </span>
-                            </div>
-                          )}
-
-                          <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '0.6rem', marginTop: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                            <span style={{ color: '#1F2937', fontWeight: 600 }}>Total Amount:</span>
-                            <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#714B67' }}>
-                              ₹{Math.round(quoteGrandTotal).toLocaleString()}
-                            </span>
-                          </div>
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                            <span style={{ color: '#64748B' }}>Validity:</span>
-                            <span style={{ fontWeight: 600, color: '#475569' }}>
-                              {liveQuote?.expires_at ? `Valid till ${new Date(liveQuote.expires_at).toLocaleDateString()}` : 'Valid for 30 Days'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      {isStaff ? (
-                        <>
-                          <button
-                            className="odoo-btn odoo-btn-primary"
-                            onClick={() => {
-                              setCounterType('rep');
-                              setCounterDiscount('5');
-                              setShowCounterModal(true);
+                  {/* Messages Area */}
+                  <div
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      padding: '0.75rem',
+                      background: '#FFFFFF',
+                      borderRadius: 8,
+                      border: '1px solid #E2E8F0',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                      marginBottom: '0.75rem',
+                    }}
+                  >
+                    {displayMessages.length === 0 ? (
+                      <div style={{ textAlign: 'center', color: '#94A3B8', fontSize: '0.8125rem', marginTop: 'auto', marginBottom: 'auto' }}>
+                        No messages yet. Type below to start live negotiation.
+                      </div>
+                    ) : (
+                      displayMessages.map((m) => {
+                        const isMe = isStaff
+                          ? (m.sender === 'Sales Rep' || m.authorType === 'rep')
+                          : (m.sender === 'Customer' || m.authorType === 'customer');
+                        const hasDiscount = m.counterDiscountPct !== undefined && m.counterDiscountPct !== null && m.counterDiscountPct > 0;
+                        return (
+                          <div
+                            key={m.id}
+                            style={{
+                              alignSelf: isMe ? 'flex-end' : 'flex-start',
+                              maxWidth: '78%',
+                              backgroundColor: isMe ? '#714B67' : hasDiscount ? '#FFFBEB' : '#F1F5F9',
+                              border: hasDiscount ? '1px solid #FCD34D' : 'none',
+                              color: isMe ? '#FFFFFF' : '#1F2937',
+                              padding: '0.65rem 0.9rem',
+                              borderRadius: isMe ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                              fontSize: '0.8125rem',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                             }}
-                            style={{ cursor: 'pointer' }}
                           >
-                            ⚡ Propose Sales Counter-Offer
-                          </button>
-                          {liveQuote?.id && (
-                            <button
-                              className="odoo-btn odoo-btn-secondary"
-                              onClick={() => navigate(`/quotations/${liveQuote.id}`)}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              ← Back to Quotation Details
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            className="odoo-btn odoo-btn-primary"
-                            onClick={handleAcceptOffer}
-                            style={{ cursor: 'pointer' }}
+                            <div style={{ fontSize: '0.7rem', opacity: isMe ? 0.9 : 0.75, marginBottom: '0.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                              <span>{m.senderName}</span>
+                              {hasDiscount && (
+                                <span style={{ backgroundColor: '#F59E0B', color: '#FFF', padding: '0.1rem 0.35rem', borderRadius: 4, fontSize: '0.65rem' }}>
+                                  Counter: {m.counterDiscountPct}%
+                                </span>
+                              )}
+                              <span>{m.timestamp}</span>
+                            </div>
+                            <div style={{ wordBreak: 'break-word', lineHeight: 1.4 }}>{m.text}</div>
+                          </div>
+                        );
+                      })
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Input form */}
+                  <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input
+                      type="text"
+                      className="odoo-input"
+                      placeholder={isStaff ? "Type a reply or counter note to customer..." : "Type a message or negotiation note..."}
+                      value={inputMsg}
+                      onChange={(e) => setInputMsg(e.target.value)}
+                      disabled={isSending}
+                      style={{ flex: 1, fontSize: '0.8125rem', padding: '0.5rem 0.75rem' }}
+                    />
+                    <button
+                      type="submit"
+                      className="odoo-btn odoo-btn-primary"
+                      disabled={isSending || !inputMsg.trim()}
+                      style={{ padding: '0.5rem 1rem', fontSize: '0.8125rem' }}
+                    >
+                      {isSending ? 'Sending...' : 'Send'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Right Column: Terms & Actions */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div className="odoo-card">
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937', marginBottom: '1rem' }}>
+                    Current Offer Terms
+                  </h3>
+
+                  {(() => {
+                    const quoteSubtotal = Number(liveQuote?.subtotal || liveQuote?.untaxed_amount || 0);
+                    const quoteDiscountAmt = Number(liveQuote?.total_discount || liveQuote?.discount_amount || 0);
+                    const quoteTaxAmt = Number(liveQuote?.total_tax || liveQuote?.tax_amount || 0);
+                    const quoteGrandTotal = Number(
+                      liveQuote?.grand_total || liveQuote?.total_amount || (quoteSubtotal - quoteDiscountAmt + quoteTaxAmt)
+                    );
+
+                    const lineAvgDiscount =
+                      quoteLines.length > 0
+                        ? quoteLines.reduce((acc: number, l: any) => acc + Number(l.discount_pct || l.discountPct || l.discount || 0), 0) /
+                          quoteLines.length
+                        : 0;
+
+                    const effectiveDiscountPct = Number(
+                      liveQuote?.discount_pct !== undefined && liveQuote?.discount_pct !== null && Number(liveQuote.discount_pct) > 0
+                        ? liveQuote.discount_pct
+                        : quoteSubtotal > 0 && quoteDiscountAmt > 0
+                        ? ((quoteDiscountAmt / quoteSubtotal) * 100).toFixed(1)
+                        : lineAvgDiscount > 0
+                        ? lineAvgDiscount.toFixed(1)
+                        : 0
+                    );
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                        {quoteSubtotal > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748B' }}>Gross Subtotal:</span>
+                            <span style={{ fontWeight: 600, color: '#475569' }}>
+                              ₹{Math.round(quoteSubtotal).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: '#64748B' }}>Applied Discount:</span>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color: effectiveDiscountPct > 0 ? '#059669' : '#64748B',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              flexWrap: 'wrap',
+                              justifyContent: 'flex-end',
+                            }}
                           >
-                            {isLatestFromRep && latestCounterMsg
-                              ? `✓ Accept Sales Offer (${latestCounterMsg.counterDiscountPct}% Off)`
-                              : 'Accept Offer'}
-                          </button>
+                            {effectiveDiscountPct > 0 ? (
+                              <>
+                                <span style={{ backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.1rem 0.4rem', borderRadius: 4, fontSize: '0.75rem' }}>
+                                  {effectiveDiscountPct}% OFF
+                                </span>
+                                {quoteDiscountAmt > 0 && <span>(-₹{Math.round(quoteDiscountAmt).toLocaleString()})</span>}
+                              </>
+                            ) : (
+                              '0%'
+                            )}
+                          </span>
+                        </div>
+
+                        {quoteTaxAmt > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748B' }}>Estimated Tax (18%):</span>
+                            <span style={{ fontWeight: 600, color: '#475569' }}>
+                              +₹{Math.round(quoteTaxAmt).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+
+                        <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '0.6rem', marginTop: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <span style={{ color: '#1F2937', fontWeight: 600 }}>Total Amount:</span>
+                          <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#714B67' }}>
+                            ₹{Math.round(quoteGrandTotal).toLocaleString()}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                          <span style={{ color: '#64748B' }}>Validity:</span>
+                          <span style={{ fontWeight: 600, color: '#475569' }}>
+                            {liveQuote?.expires_at ? `Valid till ${new Date(liveQuote.expires_at).toLocaleDateString()}` : 'Valid for 30 Days'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {isStaff ? (
+                      <>
+                        <button
+                          className="odoo-btn odoo-btn-primary"
+                          onClick={() => {
+                            setCounterType('rep');
+                            setCounterDiscount('5');
+                            setShowCounterModal(true);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          ⚡ Propose Sales Counter-Offer
+                        </button>
+                        {liveQuote?.id && (
                           <button
                             className="odoo-btn odoo-btn-secondary"
-                            onClick={() => {
-                              setCounterType('customer');
-                              setCounterDiscount(String(latestCounterMsg?.counterDiscountPct || 10));
-                              setShowCounterModal(true);
-                            }}
+                            onClick={() => navigate(`/quotations/${liveQuote.id}`)}
                             style={{ cursor: 'pointer' }}
                           >
-                            Counter Offer
+                            ← Back to Quotation Details
                           </button>
-                        </>
-                      )}
-                    </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="odoo-btn odoo-btn-primary"
+                          onClick={handleAcceptOffer}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {isLatestFromRep && latestCounterMsg
+                            ? `✓ Accept Sales Offer (${latestCounterMsg.counterDiscountPct}% Off)`
+                            : 'Accept Offer'}
+                        </button>
+                        <button
+                          className="odoo-btn odoo-btn-secondary"
+                          onClick={() => {
+                            setCounterType('customer');
+                            setCounterDiscount(String(latestCounterMsg?.counterDiscountPct || 10));
+                            setShowCounterModal(true);
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          Counter Offer
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
+          </div>
           )}
         </>
       )}
