@@ -222,16 +222,24 @@ export const fulfillmentApi = {
     const res = await api.get('/fulfillment/warehouses');
     return res.data;
   },
-  createWarehouse: async (data: { name: string; code?: string; location?: string; shipping_cost_weight?: number }) => {
+  createWarehouse: async (data: { name: string; code?: string; location?: string; shipping_cost_weight?: number; is_active?: boolean }) => {
     const res = await api.post('/fulfillment/warehouses', data);
+    return res.data;
+  },
+  updateWarehouse: async (id: number | string, data: { name?: string; code?: string; location?: string; shipping_cost_weight?: number; is_active?: boolean }) => {
+    const res = await api.patch(`/fulfillment/warehouses/${id}`, data);
     return res.data;
   },
   getWarehouseStock: async (warehouseId: number | string) => {
     const res = await api.get(`/fulfillment/warehouses/${warehouseId}/stock`);
     return res.data;
   },
-  updateStock: async (warehouseId: number | string, data: { product_id: number; quantity: number; reorder_level?: number }) => {
+  updateStock: async (warehouseId: number | string, data: { product_id: number; variant_id?: number; quantity?: number; reorder_level?: number; reorder_quantity?: number; notes?: string }) => {
     const res = await api.post(`/fulfillment/warehouses/${warehouseId}/stock`, data);
+    return res.data;
+  },
+  replenishStock: async (warehouseId: number | string, data: { product_id: number; variant_id?: number; quantity?: number; notes?: string }) => {
+    const res = await api.post(`/fulfillment/warehouses/${warehouseId}/replenish`, data);
     return res.data;
   },
   checkBackordersRestock: async (quoteId: number | string) => {

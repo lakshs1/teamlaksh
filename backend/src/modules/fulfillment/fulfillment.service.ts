@@ -5,6 +5,7 @@ import {
   quotes,
   quoteLines,
   products,
+  productCategories,
   warehouses,
   warehouseStock,
   fulfillmentSplits,
@@ -158,42 +159,80 @@ export async function calculateWarehouseSplit(quoteId: number): Promise<SplitRec
   const splits: SplitItem[] = [];
   const backordered: BackorderItem[] = [];
 
-  for (const line of physicalLines) {
-    let remainingQty = line.quantity;
-    const prod = productMap.get(line.productId);
-    const prodName = prod ? prod.name : `Product #${line.productId}`;
-
-    for (const wh of activeWarehouses) {
+  // Shipment minimization check:
+  // If any single warehouse can fulfill 100% of order lines, select it to achieve 1 single shipment.
+  // activeWarehouses is sorted by shippingCostWeight ASC, so the cheapest capable warehouse is chosen.
+  let singleCapableWarehouse: (typeof activeWarehouses)[0] | null = null;
+  for (const wh of activeWarehouses) {
+    const canFulfillAll = physicalLines.every((line) => {
       const stockKey = `${wh.id}_${line.productId}_${line.variantId ?? "null"}`;
       const available = stockAvailableMap.get(stockKey) || 0;
-
-      if (available > 0) {
-        const take = Math.min(remainingQty, available);
-        splits.push({
-          quote_line_id: line.id,
-          product_id: line.productId,
-          product_name: prodName,
-          variant_id: line.variantId ?? null,
-          warehouse_id: wh.id,
-          warehouse_name: wh.name,
-          quantity: take,
-          is_backordered: false,
-        });
-
-        remainingQty -= take;
-        stockAvailableMap.set(stockKey, available - take);
-
-        if (remainingQty === 0) break;
-      }
+      return available >= line.quantity;
+    });
+    if (canFulfillAll) {
+      singleCapableWarehouse = wh;
+      break;
     }
+  }
 
-    if (remainingQty > 0) {
-      backordered.push({
+  if (singleCapableWarehouse) {
+    // Single shipment fulfillment
+    for (const line of physicalLines) {
+      const prod = productMap.get(line.productId);
+      const prodName = prod ? prod.name : `Product #${line.productId}`;
+      splits.push({
         quote_line_id: line.id,
         product_id: line.productId,
         product_name: prodName,
-        quantity_backordered: remainingQty,
+        variant_id: line.variantId ?? null,
+        warehouse_id: singleCapableWarehouse.id,
+        warehouse_name: singleCapableWarehouse.name,
+        quantity: line.quantity,
+        is_backordered: false,
       });
+      const stockKey = `${singleCapableWarehouse.id}_${line.productId}_${line.variantId ?? "null"}`;
+      const available = stockAvailableMap.get(stockKey) || 0;
+      stockAvailableMap.set(stockKey, available - line.quantity);
+    }
+  } else {
+    // Multi-warehouse greedy allocation
+    for (const line of physicalLines) {
+      let remainingQty = line.quantity;
+      const prod = productMap.get(line.productId);
+      const prodName = prod ? prod.name : `Product #${line.productId}`;
+
+      for (const wh of activeWarehouses) {
+        const stockKey = `${wh.id}_${line.productId}_${line.variantId ?? "null"}`;
+        const available = stockAvailableMap.get(stockKey) || 0;
+
+        if (available > 0) {
+          const take = Math.min(remainingQty, available);
+          splits.push({
+            quote_line_id: line.id,
+            product_id: line.productId,
+            product_name: prodName,
+            variant_id: line.variantId ?? null,
+            warehouse_id: wh.id,
+            warehouse_name: wh.name,
+            quantity: take,
+            is_backordered: false,
+          });
+
+          remainingQty -= take;
+          stockAvailableMap.set(stockKey, available - take);
+
+          if (remainingQty === 0) break;
+        }
+      }
+
+      if (remainingQty > 0) {
+        backordered.push({
+          quote_line_id: line.id,
+          product_id: line.productId,
+          product_name: prodName,
+          quantity_backordered: remainingQty,
+        });
+      }
     }
   }
 
@@ -616,37 +655,106 @@ export async function createWarehouse(data: {
   };
 }
 
+export async function updateWarehouse(
+  warehouseId: number,
+  data: {
+    name?: string;
+    code?: string;
+    location?: string;
+    shipping_cost_weight?: number;
+    is_active?: boolean;
+  }
+) {
+  const [existing] = await db.select().from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1);
+  if (!existing) {
+    throw ApiError.notFound(`Warehouse with ID ${warehouseId} not found`);
+  }
+
+  const updates: Record<string, any> = { updatedAt: new Date() };
+  if (data.name !== undefined) updates.name = data.name;
+  if (data.code !== undefined) updates.code = data.code;
+  if (data.location !== undefined) updates.location = data.location;
+  if (data.shipping_cost_weight !== undefined) {
+    updates.shippingCostWeight = Number(data.shipping_cost_weight).toFixed(2);
+  }
+  if (data.is_active !== undefined) updates.isActive = data.is_active;
+
+  const [updated] = await db
+    .update(warehouses)
+    .set(updates)
+    .where(eq(warehouses.id, warehouseId))
+    .returning();
+
+  return {
+    id: updated.id,
+    name: updated.name,
+    code: updated.code,
+    location: updated.location,
+    shipping_cost_weight: Number(updated.shippingCostWeight),
+    is_active: updated.isActive,
+    created_at: updated.createdAt,
+  };
+}
+
 export async function getWarehouseStock(warehouseId: number) {
   const [wh] = await db.select().from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1);
   if (!wh) {
     throw ApiError.notFound(`Warehouse with ID ${warehouseId} not found`);
   }
 
+  // Fetch all active products joined with category names
+  const allProducts = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      unit: products.unit,
+      basePrice: products.basePrice,
+      categoryId: products.categoryId,
+      categoryName: productCategories.name,
+    })
+    .from(products)
+    .leftJoin(productCategories, eq(products.categoryId, productCategories.id))
+    .where(eq(products.isActive, true))
+    .orderBy(products.name);
+
+  // Fetch existing warehouse stock records
   const stockList = await db
     .select()
     .from(warehouseStock)
     .where(eq(warehouseStock.warehouseId, warehouseId));
 
-  if (stockList.length === 0) return [];
+  const stockMap = new Map(stockList.map((s) => [s.productId, s]));
 
-  const prodIds = Array.from(new Set(stockList.map((s) => s.productId)));
-  const prodRows = await db.select().from(products).where(inArray(products.id, prodIds));
-  const prodMap = new Map(prodRows.map((p) => [p.id, p]));
+  return allProducts.map((prod) => {
+    const s = stockMap.get(prod.id);
+    const qtyOnHand = s ? s.quantityOnHand : 0;
+    const qtyReserved = s ? s.quantityReserved : 0;
+    const reorderLvl = s ? s.reorderLevel : 10;
+    const reorderQty = s ? s.reorderQuantity : 50;
+    const available = Math.max(0, qtyOnHand - qtyReserved);
 
-  return stockList.map((s) => {
-    const prod = prodMap.get(s.productId);
-    const available = Math.max(0, s.quantityOnHand - s.quantityReserved);
+    let status: "in_stock" | "low_stock" | "out_of_stock" = "in_stock";
+    if (qtyOnHand === 0) {
+      status = "out_of_stock";
+    } else if (qtyOnHand <= reorderLvl) {
+      status = "low_stock";
+    }
 
     return {
-      id: s.id,
-      warehouse_id: s.warehouseId,
-      product_id: s.productId,
-      variant_id: s.variantId,
-      quantity_on_hand: s.quantityOnHand,
-      quantity_reserved: s.quantityReserved,
+      id: s?.id ?? 0,
+      warehouse_id: warehouseId,
+      product_id: prod.id,
+      variant_id: s?.variantId ?? null,
+      quantity_on_hand: qtyOnHand,
+      quantity_reserved: qtyReserved,
       available_quantity: available,
-      reorder_level: s.reorderLevel,
-      product_name: prod ? prod.name : undefined,
+      reorder_level: reorderLvl,
+      reorder_quantity: reorderQty,
+      stock_status: status,
+      product_name: prod.name,
+      category_name: prod.categoryName || "General",
+      unit: prod.unit || "unit",
+      base_price: Number(prod.basePrice || 0),
       warehouse_name: wh.name,
     };
   });
@@ -657,9 +765,10 @@ export async function updateWarehouseStock(
   data: {
     product_id: number;
     variant_id?: number;
-    quantity: number;
+    quantity?: number;
     reorder_level?: number;
     reorder_quantity?: number;
+    notes?: string;
   },
   userId?: number
 ) {
@@ -682,15 +791,15 @@ export async function updateWarehouseStock(
     .limit(1);
 
   let updatedRecord;
-  let delta = data.quantity;
+  const targetQty = data.quantity !== undefined ? data.quantity : (existing ? existing.quantityOnHand : 0);
+  const delta = existing ? targetQty - existing.quantityOnHand : targetQty;
 
   if (existing) {
-    delta = data.quantity - existing.quantityOnHand;
     const [updated] = await db
       .update(warehouseStock)
       .set({
-        quantity: data.quantity,
-        quantityOnHand: data.quantity,
+        quantity: targetQty,
+        quantityOnHand: targetQty,
         variantId: data.variant_id ?? existing.variantId,
         reorderLevel: data.reorder_level ?? existing.reorderLevel,
         reorderQuantity: data.reorder_quantity ?? existing.reorderQuantity,
@@ -706,8 +815,8 @@ export async function updateWarehouseStock(
         warehouseId,
         productId: data.product_id,
         variantId: data.variant_id ?? null,
-        quantity: data.quantity,
-        quantityOnHand: data.quantity,
+        quantity: targetQty,
+        quantityOnHand: targetQty,
         quantityReserved: 0,
         reorderLevel: data.reorder_level ?? 10,
         reorderQuantity: data.reorder_quantity ?? 50,
@@ -726,11 +835,16 @@ export async function updateWarehouseStock(
       movementType: delta > 0 ? "restock" : "adjustment",
       referenceId: `WH-${warehouseId}`,
       performedBy: userId ?? null,
-      notes: "Stock quantity adjustment",
+      notes: data.notes || "Stock level & replenishment rule adjustment",
     });
   }
 
   const available = Math.max(0, updatedRecord.quantityOnHand - updatedRecord.quantityReserved);
+  const status = updatedRecord.quantityOnHand === 0
+    ? "out_of_stock"
+    : updatedRecord.quantityOnHand <= updatedRecord.reorderLevel
+      ? "low_stock"
+      : "in_stock";
 
   return {
     id: updatedRecord.id,
@@ -741,8 +855,104 @@ export async function updateWarehouseStock(
     quantity_reserved: updatedRecord.quantityReserved,
     available_quantity: available,
     reorder_level: updatedRecord.reorderLevel,
+    reorder_quantity: updatedRecord.reorderQuantity,
+    stock_status: status,
     product_name: prod.name,
     warehouse_name: wh.name,
+  };
+}
+
+export async function replenishWarehouseStock(
+  warehouseId: number,
+  data: {
+    product_id: number;
+    variant_id?: number;
+    quantity?: number;
+    notes?: string;
+  },
+  userId?: number
+) {
+  const [wh] = await db.select().from(warehouses).where(eq(warehouses.id, warehouseId)).limit(1);
+  if (!wh) throw ApiError.notFound(`Warehouse with ID ${warehouseId} not found`);
+
+  const [prod] = await db.select().from(products).where(eq(products.id, data.product_id)).limit(1);
+  if (!prod) throw ApiError.notFound(`Product with ID ${data.product_id} not found`);
+
+  const [existing] = await db
+    .select()
+    .from(warehouseStock)
+    .where(
+      and(
+        eq(warehouseStock.warehouseId, warehouseId),
+        eq(warehouseStock.productId, data.product_id)
+      )
+    )
+    .limit(1);
+
+  const replenishQty = data.quantity && data.quantity > 0 ? data.quantity : (existing?.reorderQuantity || 50);
+
+  let updatedRecord;
+  if (existing) {
+    const newQty = existing.quantityOnHand + replenishQty;
+    const [updated] = await db
+      .update(warehouseStock)
+      .set({
+        quantity: newQty,
+        quantityOnHand: newQty,
+        updatedAt: new Date(),
+      })
+      .where(eq(warehouseStock.id, existing.id))
+      .returning();
+    updatedRecord = updated;
+  } else {
+    const [inserted] = await db
+      .insert(warehouseStock)
+      .values({
+        warehouseId,
+        productId: data.product_id,
+        variantId: data.variant_id ?? null,
+        quantity: replenishQty,
+        quantityOnHand: replenishQty,
+        quantityReserved: 0,
+        reorderLevel: 10,
+        reorderQuantity: 50,
+      })
+      .returning();
+    updatedRecord = inserted;
+  }
+
+  await db.insert(stockMovements).values({
+    warehouseId,
+    productId: data.product_id,
+    variantId: data.variant_id ?? null,
+    quantityChange: replenishQty,
+    movementType: "restock",
+    referenceId: `REPLENISH-WH${warehouseId}`,
+    performedBy: userId ?? null,
+    notes: data.notes || `Replenishment rule executed: +${replenishQty} units added`,
+  });
+
+  const available = Math.max(0, updatedRecord.quantityOnHand - updatedRecord.quantityReserved);
+  const status = updatedRecord.quantityOnHand === 0
+    ? "out_of_stock"
+    : updatedRecord.quantityOnHand <= updatedRecord.reorderLevel
+      ? "low_stock"
+      : "in_stock";
+
+  return {
+    id: updatedRecord.id,
+    warehouse_id: updatedRecord.warehouseId,
+    product_id: updatedRecord.productId,
+    variant_id: updatedRecord.variantId,
+    quantity_on_hand: updatedRecord.quantityOnHand,
+    quantity_reserved: updatedRecord.quantityReserved,
+    available_quantity: available,
+    reorder_level: updatedRecord.reorderLevel,
+    reorder_quantity: updatedRecord.reorderQuantity,
+    stock_status: status,
+    product_name: prod.name,
+    warehouse_name: wh.name,
+    replenished_by: replenishQty,
   };
 }
 

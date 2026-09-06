@@ -74,6 +74,7 @@ app.use("/api/v1/quotes", quotesRoutes);
 app.use("/api/v1/approvals", approvalsRoutes);
 app.use("/api/v1/recommendations", recommendationsRoutes);
 app.use("/api/v1/fulfillment", fulfillmentRoutes);
+app.use("/api/fulfillment", fulfillmentRoutes); // backward compatibility alias
 app.use("/api/v1/billing", billingRoutes);
 app.use("/api/v1/portal", portalRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);

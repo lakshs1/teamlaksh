@@ -5,15 +5,19 @@ import {
   overrideWarehouseSplit,
   listWarehouses,
   createWarehouse,
+  updateWarehouse,
   getWarehouseStock,
   updateWarehouseStock,
+  replenishWarehouseStock,
   checkBackordersRestock,
   consolidateBackorders,
   simulateInboundRestock,
 } from "./fulfillment.service.js";
 import {
   createWarehouseSchema,
+  updateWarehouseSchema,
   updateStockSchema,
+  replenishStockSchema,
   manualSplitOverrideSchema,
 } from "./fulfillment.schemas.js";
 import { ApiError } from "../../lib/api-error.js";
@@ -75,6 +79,18 @@ export async function createWarehouseHandler(req: Request, res: Response, next: 
   }
 }
 
+export async function updateWarehouseHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const warehouseId = Number(req.params.id);
+    if (isNaN(warehouseId)) throw ApiError.badRequest("Invalid warehouse ID");
+    const body = updateWarehouseSchema.parse(req.body);
+    const data = await updateWarehouse(warehouseId, body);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getWarehouseStockHandler(req: Request, res: Response, next: NextFunction) {
   try {
     const warehouseId = Number(req.params.id);
@@ -93,6 +109,19 @@ export async function updateWarehouseStockHandler(req: Request, res: Response, n
     const userId = (req as any).user?.id;
     const body = updateStockSchema.parse(req.body);
     const data = await updateWarehouseStock(warehouseId, body, userId);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function replenishWarehouseStockHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const warehouseId = Number(req.params.id);
+    if (isNaN(warehouseId)) throw ApiError.badRequest("Invalid warehouse ID");
+    const userId = (req as any).user?.id;
+    const body = replenishStockSchema.parse(req.body);
+    const data = await replenishWarehouseStock(warehouseId, body, userId);
     res.status(200).json({ success: true, data });
   } catch (err) {
     next(err);

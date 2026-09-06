@@ -7,15 +7,19 @@ import {
   overrideWarehouseSplitHandler,
   listWarehousesHandler,
   createWarehouseHandler,
+  updateWarehouseHandler,
   getWarehouseStockHandler,
   updateWarehouseStockHandler,
+  replenishWarehouseStockHandler,
   checkBackordersRestockHandler,
   consolidateBackordersHandler,
   simulateInboundRestockHandler,
 } from "./fulfillment.controller.js";
 import {
   createWarehouseSchema,
+  updateWarehouseSchema,
   updateStockSchema,
+  replenishStockSchema,
   manualSplitOverrideSchema,
 } from "./fulfillment.schemas.js";
 
@@ -65,6 +69,13 @@ router.post(
   validate({ body: createWarehouseSchema }),
   createWarehouseHandler
 );
+router.patch(
+  "/warehouses/:id",
+  authenticate,
+  authorize("admin", "operations", "finance", "finance_operations"),
+  validate({ body: updateWarehouseSchema }),
+  updateWarehouseHandler
+);
 
 // ── Inventory & Stock Management ──────────────────────────
 router.get("/warehouses/:id/stock", authenticate, getWarehouseStockHandler);
@@ -74,6 +85,13 @@ router.post(
   authorize("admin", "operations", "finance", "finance_operations"),
   validate({ body: updateStockSchema }),
   updateWarehouseStockHandler
+);
+router.post(
+  "/warehouses/:id/replenish",
+  authenticate,
+  authorize("admin", "operations", "finance", "finance_operations"),
+  validate({ body: replenishStockSchema }),
+  replenishWarehouseStockHandler
 );
 
 export default router;

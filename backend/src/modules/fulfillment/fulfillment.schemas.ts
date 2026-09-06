@@ -48,8 +48,18 @@ export const updateStockSchema = z
     quantity: z.coerce.number().int().openapi({ example: 50, description: "Quantity on hand" }),
     reorder_level: z.coerce.number().int().min(0).optional().default(10).openapi({ example: 10 }),
     reorder_quantity: z.coerce.number().int().min(1).optional().default(50).openapi({ example: 50 }),
+    notes: z.string().optional().openapi({ example: "Stock adjustment" }),
   })
   .openapi("UpdateStockRequest");
+
+export const replenishStockSchema = z
+  .object({
+    product_id: z.coerce.number().int().positive("Product ID must be positive").openapi({ example: 101 }),
+    variant_id: z.coerce.number().int().positive().optional(),
+    quantity: z.coerce.number().int().positive().optional().openapi({ example: 50, description: "Quantity to replenish (defaults to configured reorder_quantity)" }),
+    notes: z.string().optional().openapi({ example: "Automated replenishment rule execution" }),
+  })
+  .openapi("ReplenishStockRequest");
 
 export const warehouseStockResponseSchema = z
   .object({
@@ -61,7 +71,13 @@ export const warehouseStockResponseSchema = z
     quantity_reserved: z.number().int(),
     available_quantity: z.number().int(),
     reorder_level: z.number().int(),
+    reorder_quantity: z.number().int().optional().default(50),
+    stock_status: z.enum(["in_stock", "low_stock", "out_of_stock"]).optional(),
     product_name: z.string().optional(),
+    category_name: z.string().optional(),
+    sku: z.string().optional(),
+    unit: z.string().optional(),
+    base_price: z.number().optional(),
     warehouse_name: z.string().optional(),
   })
   .openapi("WarehouseStockResponse");
@@ -329,6 +345,84 @@ registry.registerPath({
   responses: {
     200: {
       description: "Warehouse stock updated successfully",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.literal(true),
+            data: warehouseStockResponseSchema,
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "patch",
+  path: "/fulfillment/warehouses/{id}",
+  tags: ["Fulfillment"],
+  summary: "Update warehouse details and shipping cost weighting (Admin / Operations)",
+  security: [{ BearerAuth: [] }],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "integer" },
+      description: "Warehouse ID",
+    },
+  ],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: updateWarehouseSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Warehouse updated successfully",
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.literal(true),
+            data: warehouseResponseSchema,
+          }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/fulfillment/warehouses/{id}/replenish",
+  tags: ["Fulfillment"],
+  summary: "Trigger replenishment for a warehouse item (Admin / Operations)",
+  security: [{ BearerAuth: [] }],
+  parameters: [
+    {
+      name: "id",
+      in: "path",
+      required: true,
+      schema: { type: "integer" },
+      description: "Warehouse ID",
+    },
+  ],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: replenishStockSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Stock replenished successfully",
       content: {
         "application/json": {
           schema: z.object({
