@@ -6,13 +6,22 @@ import {
   getSubscriptionByIdHandler,
   updateSubscriptionHandler,
   cancelSubscriptionHandler,
+  listSubscriptionPlansHandler,
+  getSubscriptionPlanByIdHandler,
+  createSubscriptionPlanHandler,
+  updateSubscriptionPlanHandler,
+  deleteSubscriptionPlanHandler,
   listInvoicesHandler,
   getInvoiceByIdHandler,
   payInvoiceHandler,
   createCreditNoteHandler,
   createInvoiceHandler,
 } from "./billing.controller.js";
-import { updateSubscriptionSchema } from "./billing.schemas.js";
+import {
+  updateSubscriptionSchema,
+  createSubscriptionPlanSchema,
+  updateSubscriptionPlanSchema,
+} from "./billing.schemas.js";
 
 const router = Router();
 
@@ -31,6 +40,30 @@ router.post(
   authenticate,
   authorize("finance", "operations", "finance_operations", "admin"),
   cancelSubscriptionHandler
+);
+
+// ── Subscription Plans (PRD Section A5) ───────────────────
+router.get("/plans", authenticate, listSubscriptionPlansHandler);
+router.post(
+  "/plans",
+  authenticate,
+  authorize("admin", "manager", "finance", "operations", "finance_operations"),
+  validate({ body: createSubscriptionPlanSchema }),
+  createSubscriptionPlanHandler
+);
+router.get("/plans/:id", authenticate, getSubscriptionPlanByIdHandler);
+router.patch(
+  "/plans/:id",
+  authenticate,
+  authorize("admin", "manager", "finance", "operations", "finance_operations"),
+  validate({ body: updateSubscriptionPlanSchema }),
+  updateSubscriptionPlanHandler
+);
+router.delete(
+  "/plans/:id",
+  authenticate,
+  authorize("admin", "manager", "finance", "operations", "finance_operations"),
+  deleteSubscriptionPlanHandler
 );
 
 // ── Invoices & Credit Notes ──────────────────────────────

@@ -274,8 +274,42 @@ export const billingApi = {
     const res = await api.patch(`/billing/subscriptions/${id}`, data);
     return res.data;
   },
-  cancelSubscription: async (id: number | string) => {
-    const res = await api.post(`/billing/subscriptions/${id}/cancel`);
+  cancelSubscription: async (id: number | string, data?: { reason?: string }) => {
+    const res = await api.post(`/billing/subscriptions/${id}/cancel`, data);
+    return res.data;
+  },
+  getPlans: async () => {
+    const res = await api.get('/billing/plans');
+    return res.data;
+  },
+  getPlanById: async (id: number | string) => {
+    const res = await api.get(`/billing/plans/${id}`);
+    return res.data;
+  },
+  createPlan: async (data: {
+    name: string;
+    code?: string;
+    description?: string;
+    product_id?: number;
+    interval?: string;
+    base_price: number;
+    cost_price?: number;
+    proration_rule?: string;
+    allow_mid_cycle_changes?: boolean;
+    cancellation_policy?: string;
+    refund_percentage?: number;
+    notice_period_days?: number;
+    is_active?: boolean;
+  }) => {
+    const res = await api.post('/billing/plans', data);
+    return res.data;
+  },
+  updatePlan: async (id: number | string, data: Record<string, any>) => {
+    const res = await api.patch(`/billing/plans/${id}`, data);
+    return res.data;
+  },
+  deletePlan: async (id: number | string) => {
+    const res = await api.delete(`/billing/plans/${id}`);
     return res.data;
   },
   getInvoices: async (params?: { customer_id?: number; status?: string; type?: string; page?: number; limit?: number }) => {

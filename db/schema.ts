@@ -398,8 +398,28 @@ export const stockMovements = pgTable("stock_movements", {
 // 9. SUBSCRIPTIONS & RECURRING BILLING SCHEDULES
 // ============================================================================
 
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  code: varchar("code", { length: 100 }),
+  description: text("description"),
+  productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
+  interval: varchar("interval", { length: 50 }).notNull().default("monthly"), // monthly | quarterly | yearly
+  basePrice: numeric("base_price", { precision: 12, scale: 2 }).notNull(),
+  costPrice: numeric("cost_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  prorationRule: varchar("proration_rule", { length: 50 }).notNull().default("exact_day"), // exact_day | full_period | no_proration
+  allowMidCycleChanges: boolean("allow_mid_cycle_changes").notNull().default(true),
+  cancellationPolicy: varchar("cancellation_policy", { length: 50 }).notNull().default("prorated_refund"), // prorated_refund | end_of_cycle | no_refund
+  refundPercentage: numeric("refund_percentage", { precision: 5, scale: 2 }).notNull().default("100.00"),
+  noticePeriodDays: integer("notice_period_days").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const subscriptions = pgTable("subscriptions", {
   id: serial("id").primaryKey(),
+  planId: integer("plan_id").references(() => subscriptionPlans.id, { onDelete: "set null" }),
   quoteId: integer("quote_id")
     .notNull()
     .references(() => quotes.id),
@@ -419,6 +439,9 @@ export const subscriptions = pgTable("subscriptions", {
   startsAt: timestamp("starts_at").notNull(),
   currentPeriodStart: timestamp("current_period_start").notNull(),
   currentPeriodEnd: timestamp("current_period_end").notNull(),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  cancelledAt: timestamp("cancelled_at"),
+  cancellationReason: text("cancellation_reason"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -533,6 +556,8 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   upsellSuggestions: many(upsellRules, { relationName: "sourceProduct" }),
   backorders: many(backorders),
   stockMovements: many(stockMovements),
+  subscriptionPlans: many(subscriptionPlans),
+  subscriptions: many(subscriptions),
 }));
 
 export const quotesRelations = relations(quotes, ({ one, many }) => ({
@@ -641,6 +666,61 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
   }),
 }));
 
+export const subscriptionPlansRelations = relations(subscriptionPlans, ({ one, many }) => ({
+  product: one(products, {
+    fields: [subscriptionPlans.productId],
+    references: [products.id],
+  }),
+  subscriptions: many(subscriptions),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
+  plan: one(subscriptionPlans, {
+    fields: [subscriptions.planId],
+    references: [subscriptionPlans.id],
+  }),
+  quote: one(quotes, {
+    fields: [subscriptions.quoteId],
+    references: [quotes.id],
+  }),
+  quoteLine: one(quoteLines, {
+    fields: [subscriptions.quoteLineId],
+    references: [quoteLines.id],
+  }),
+  customer: one(customers, {
+    fields: [subscriptions.customerId],
+    references: [customers.id],
+  }),
+  product: one(products, {
+    fields: [subscriptions.productId],
+    references: [products.id],
+  }),
+  billingSchedules: many(billingSchedules),
+}));
+
+export const billingSchedulesRelations = relations(billingSchedules, ({ one }) => ({
+  subscription: one(subscriptions, {
+    fields: [billingSchedules.subscriptionId],
+    references: [subscriptions.id],
+  }),
+  invoice: one(invoices, {
+    fields: [billingSchedules.invoiceId],
+    references: [invoices.id],
+  }),
+}));
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  quote: one(quotes, {
+    fields: [invoices.quoteId],
+    references: [quotes.id],
+  }),
+  customer: one(customers, {
+    fields: [invoices.customerId],
+    references: [customers.id],
+  }),
+  billingSchedules: many(billingSchedules),
+}));
+
 // ============================================================================
 // 13. ZOD SCHEMAS & TYPE INFERENCE
 // ============================================================================
@@ -682,6 +762,21 @@ export type QuoteLine = z.infer<typeof selectQuoteLineSchema>;
 export const insertInvoiceSchema = createInsertSchema(invoices);
 export const selectInvoiceSchema = createSelectSchema(invoices);
 export type Invoice = z.infer<typeof selectInvoiceSchema>;
+
+export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans);
+export const selectSubscriptionPlanSchema = createSelectSchema(subscriptionPlans);
+export type SubscriptionPlan = z.infer<typeof selectSubscriptionPlanSchema>;
+export type NewSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions);
+export const selectSubscriptionSchema = createSelectSchema(subscriptions);
+export type Subscription = z.infer<typeof selectSubscriptionSchema>;
+export type NewSubscription = z.infer<typeof insertSubscriptionSchema>;
+
+export const insertBillingScheduleSchema = createInsertSchema(billingSchedules);
+export const selectBillingScheduleSchema = createSelectSchema(billingSchedules);
+export type BillingSchedule = z.infer<typeof selectBillingScheduleSchema>;
+export type NewBillingSchedule = z.infer<typeof insertBillingScheduleSchema>;
 
 export const insertWarehouseSchema = createInsertSchema(warehouses);
 export const selectWarehouseSchema = createSelectSchema(warehouses);

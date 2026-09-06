@@ -4,6 +4,11 @@ import {
   getSubscriptionById,
   updateSubscription,
   cancelSubscription,
+  listSubscriptionPlans,
+  getSubscriptionPlanById,
+  createSubscriptionPlan,
+  updateSubscriptionPlan,
+  deleteSubscriptionPlan,
   listInvoices,
   getInvoiceById,
   markInvoicePaid,
@@ -14,6 +19,8 @@ import {
 import {
   subscriptionQuerySchema,
   updateSubscriptionSchema,
+  createSubscriptionPlanSchema,
+  updateSubscriptionPlanSchema,
   invoiceQuerySchema,
 } from "./billing.schemas.js";
 import { ApiError } from "../../lib/api-error.js";
@@ -55,7 +62,7 @@ export async function cancelSubscriptionHandler(req: Request, res: Response, nex
   try {
     const id = Number(req.params.id);
     if (isNaN(id)) throw ApiError.badRequest("Invalid subscription ID");
-    const data = await cancelSubscription(id);
+    const data = await cancelSubscription(id, req.body);
     res.status(200).json({ success: true, ...data });
   } catch (err) {
     next(err);
@@ -128,6 +135,61 @@ export async function createInvoiceHandler(req: Request, res: Response, next: Ne
       due_date: due_date ? new Date(due_date) : undefined,
     });
     res.status(201).json({ success: true, data, message: "Invoice created successfully" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ── Subscription Plans Handlers ───────────────────────────
+
+export async function listSubscriptionPlansHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const data = await listSubscriptionPlans();
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getSubscriptionPlanByIdHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) throw ApiError.badRequest("Invalid plan ID");
+    const data = await getSubscriptionPlanById(id);
+    res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createSubscriptionPlanHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = createSubscriptionPlanSchema.parse(req.body);
+    const data = await createSubscriptionPlan(body);
+    res.status(201).json({ success: true, data, message: "Subscription plan created successfully" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function updateSubscriptionPlanHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) throw ApiError.badRequest("Invalid plan ID");
+    const body = updateSubscriptionPlanSchema.parse(req.body);
+    const data = await updateSubscriptionPlan(id, body);
+    res.status(200).json({ success: true, data, message: "Subscription plan updated successfully" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteSubscriptionPlanHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) throw ApiError.badRequest("Invalid plan ID");
+    const data = await deleteSubscriptionPlan(id);
+    res.status(200).json({ success: true, ...data });
   } catch (err) {
     next(err);
   }
