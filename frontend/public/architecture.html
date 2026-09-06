@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DealFlow360 - One-Page Architecture & Data Model</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0F172A;
+      --card-bg: #1E293B;
+      --card-border: #334155;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --accent-odoo: #714B67;
+      --accent-blue: #3B82F6;
+      --accent-emerald: #10B981;
+      --accent-amber: #F59E0B;
+      --accent-purple: #8B5CF6;
+      --accent-rose: #F43F5E;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      padding: 16px 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+
+    .title-group h1 {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge-pill {
+      background: rgba(113, 75, 103, 0.35);
+      border: 1px solid var(--accent-odoo);
+      color: #E2D9E0;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+
+    /* Main Diagram Grid */
+    .architecture-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      flex: 1;
+    }
+
+    .module-column {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .module-header {
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mod-1 { border-top: 3px solid var(--accent-blue); }
+    .mod-1 .module-header { background: rgba(59, 130, 246, 0.12); color: #93C5FD; }
+
+    .mod-2 { border-top: 3px solid var(--accent-amber); }
+    .mod-2 .module-header { background: rgba(245, 158, 11, 0.12); color: #FCD34D; }
+
+    .mod-3 { border-top: 3px solid var(--accent-rose); }
+    .mod-3 .module-header { background: rgba(244, 63, 94, 0.12); color: #FDA4AF; }
+
+    .mod-4 { border-top: 3px solid var(--accent-purple); }
+    .mod-4 .module-header { background: rgba(139, 92, 246, 0.12); color: #D8B4FE; }
+
+    .mod-5 { border-top: 3px solid var(--accent-emerald); }
+    .mod-5 .module-header { background: rgba(16, 185, 129, 0.12); color: #6EE7B7; }
+
+    .module-content {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    /* Entity Cards */
+    .entity-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 11px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .entity-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+      padding-bottom: 4px;
+      border-bottom: 1px dashed var(--card-border);
+    }
+
+    .entity-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: #FFFFFF;
+      font-size: 11px;
+    }
+
+    .entity-tag {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.08);
+      color: var(--text-muted);
+    }
+
+    .entity-fields {
+      list-style: none;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #CBD5E1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .entity-fields li {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .field-pk { color: #FCD34D; font-weight: 600; }
+    .field-fk { color: #93C5FD; }
+    .field-type { color: #64748B; font-size: 9px; }
+
+    .flow-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px dashed #475569;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 10px;
+      color: #CBD5E1;
+      line-height: 1.35;
+    }
+
+    .flow-card strong {
+      display: block;
+      color: #F8FAFC;
+      margin-bottom: 3px;
+      font-size: 10.5px;
+    }
+
+    .connector-banner {
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: #1E293B;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .step-node {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent-odoo);
+      color: #FFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 10px;
+    }
+
+    .step-arrow {
+      color: #64748B;
+      font-weight: 800;
+      font-size: 13px;
+    }
+
+    footer {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #64748B;
+      padding-top: 8px;
+      border-top: 1px solid rgba(51, 65, 85, 0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1>DealFlow360 Architecture & System Data Model <span class="badge-pill">Single Page Overview</span></h1>
+      <div class="subtitle">Complete end-to-end entity relationships, rule engines, and modular operational pipelines.</div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background: var(--accent-blue)"></span> Master Governance</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--accent-amber)"></span> CPQ Engine</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--accent-rose)"></span> Risk & Approvals</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--accent-purple)"></span> Customer Portal</div>
+      <div class="legend-item"><span class="legend-dot" style="background: var(--accent-emerald)"></span> Fulfillment & Subscriptions</div>
+    </div>
+  </header>
+
+  <!-- 5 Columns Architecture -->
+  <main class="architecture-grid">
+
+    <!-- Column 1: Governance & Master Data -->
+    <div class="module-column mod-1">
+      <div class="module-header">
+        <span>1. Master Data & Governance</span>
+        <span>A1 - A7</span>
+      </div>
+      <div class="module-content">
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">customers & tiers</span>
+            <span class="entity-tag">Table</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span>name, email</span> <span class="field-type">varchar</span></li>
+            <li><span class="field-fk">FK tier_id</span> <span class="field-type">Bronze|Silver|Gold</span></li>
+            <li><span>credit_limit</span> <span class="field-type">numeric</span></li>
+            <li><span>payment_terms</span> <span class="field-type">Immediate|30d|60d</span></li>
+          </ul>
+        </div>
+
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">products & categories</span>
+            <span class="entity-tag">Catalog</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span class="field-fk">FK category_id</span> <span class="field-type">integer</span></li>
+            <li><span>base_price, cost</span> <span class="field-type">numeric</span></li>
+            <li><span>is_recurring</span> <span class="field-type">boolean</span></li>
+            <li><span>sku, unit</span> <span class="field-type">varchar</span></li>
+          </ul>
+        </div>
+
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">discount_rules</span>
+            <span class="entity-tag">Margin Rules</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span class="field-fk">FK category_id</span> <span class="field-type">integer</span></li>
+            <li><span>min_margin_pct</span> <span class="field-type">e.g. 20%</span></li>
+            <li><span>max_discount_pct</span> <span class="field-type">e.g. 15%</span></li>
+            <li><span>approval_level</span> <span class="field-type">manager|finance</span></li>
+          </ul>
+        </div>
+
+        <div class="flow-card">
+          <strong>Governance Matrix</strong>
+          Defines tier-based discount ceilings, required margins per product category, and credit term restrictions.
+        </div>
+      </div>
+    </div>
+
+    <!-- Column 2: Quoting & Pricing Engine -->
+    <div class="module-column mod-2">
+      <div class="module-header">
+        <span>2. Dynamic Quoting Engine</span>
+        <span>B1 - B3</span>
+      </div>
+      <div class="module-content">
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">quotes</span>
+            <span class="entity-tag">Core Order</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span>quote_number</span> <span class="field-type">QT-2026-XXXX</span></li>
+            <li><span class="field-fk">FK customer_id</span> <span class="field-type">customers</span></li>
+            <li><span class="field-fk">FK rep_id</span> <span class="field-type">users</span></li>
+            <li><span>status</span> <span class="field-type">draft|pending|approved</span></li>
+            <li><span>blended_risk_score</span> <span class="field-type">0 - 100</span></li>
+            <li><span>grand_total</span> <span class="field-type">numeric</span></li>
+            <li><span>portal_token</span> <span class="field-type">unique token</span></li>
+          </ul>
+        </div>
+
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">quote_lines</span>
+            <span class="entity-tag">Line Items</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span class="field-fk">FK quote_id</span> <span class="field-type">quotes</span></li>
+            <li><span class="field-fk">FK product_id</span> <span class="field-type">products</span></li>
+            <li><span>quantity</span> <span class="field-type">integer</span></li>
+            <li><span>unit_price</span> <span class="field-type">numeric</span></li>
+            <li><span>discount_pct</span> <span class="field-type">numeric</span></li>
+            <li><span>margin_pct</span> <span class="field-type">calculated</span></li>
+            <li><span>is_recurring</span> <span class="field-type">boolean</span></li>
+          </ul>
+        </div>
+
+        <div class="flow-card">
+          <strong>Risk Score Algorithm</strong>
+          Evaluates blended margin, customer payment history, and credit limit headroom:
+          <br><code>Risk = (100 - Margin%) * 0.5 + CreditExposure * 0.5</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Column 3: Approvals & Audit Trail -->
+    <div class="module-column mod-3">
+      <div class="module-header">
+        <span>3. Approvals & Risk Routing</span>
+        <span>B4 - B5</span>
+      </div>
+      <div class="module-content">
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">approval_logs</span>
+            <span class="entity-tag">Audit Trail</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span class="field-fk">FK quote_id</span> <span class="field-type">quotes</span></li>
+            <li><span class="field-fk">FK reviewer_id</span> <span class="field-type">users</span></li>
+            <li><span>level</span> <span class="field-type">manager | finance</span></li>
+            <li><span>action</span> <span class="field-type">approved|rejected</span></li>
+            <li><span>reason</span> <span class="field-type">text</span></li>
+            <li><span>created_at</span> <span class="field-type">timestamp</span></li>
+          </ul>
+        </div>
+
+        <div class="flow-card">
+          <strong>Smart Escalation Logic</strong>
+          • <strong>Auto-Approved:</strong> Discount &le; Tier Cap &amp; Margin &ge; Category Min.<br>
+          • <strong>Level 1 (Sales Mgr):</strong> Discount &gt; Cap by &le; 10%.<br>
+          • <strong>Level 2 (Finance/Ops):</strong> Negative margin, discount &gt; 10% over cap, or credit limit exceeded.
+        </div>
+
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">upsell_rules</span>
+            <span class="entity-tag">Recommendation</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span class="field-fk">FK source_product</span> <span class="field-type">products</span></li>
+            <li><span class="field-fk">FK suggested_product</span> <span class="field-type">products</span></li>
+            <li><span>rank, min_margin_pct</span> <span class="field-type">rules</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Column 4: Customer Portal -->
+    <div class="module-column mod-4">
+      <div class="module-header">
+        <span>4. Portal & Negotiation</span>
+        <span>C1 - C3</span>
+      </div>
+      <div class="module-content">
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">portal_comments</span>
+            <span class="entity-tag">Live Feed</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span class="field-fk">FK quote_id</span> <span class="field-type">quotes</span></li>
+            <li><span>author_type</span> <span class="field-type">customer | rep</span></li>
+            <li><span>message</span> <span class="field-type">text</span></li>
+            <li><span>counter_discount</span> <span class="field-type">numeric</span></li>
+            <li><span>created_at</span> <span class="field-type">timestamp</span></li>
+          </ul>
+        </div>
+
+        <div class="flow-card">
+          <strong>Token Magic Link Experience</strong>
+          Customer accesses quote without passwords at:
+          <br><code>/portal/:token</code>
+          <br>• Real-time price breakdown
+          <br>• Counter-offer submission triggers re-approval
+          <br>• One-click acceptance transitions quote to fulfillment!
+        </div>
+
+        <div class="flow-card">
+          <strong>Live Status Sync</strong>
+          When an invoice is paid or delivery moves, the portal updates seamlessly to display official order and payment receipts.
+        </div>
+      </div>
+    </div>
+
+    <!-- Column 5: Fulfillment & Billing -->
+    <div class="module-column mod-5">
+      <div class="module-header">
+        <span>5. Fulfillment & Billing</span>
+        <span>D1 - E3</span>
+      </div>
+      <div class="module-content">
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">warehouses & stock</span>
+            <span class="entity-tag">Inventory</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span>shipping_cost_weight</span> <span class="field-type">1.0x - 2.5x</span></li>
+            <li><span>quantity_on_hand</span> <span class="field-type">physical</span></li>
+            <li><span>quantity_reserved</span> <span class="field-type">allocated</span></li>
+            <li><span>reorder_level, batch</span> <span class="field-type">rules</span></li>
+          </ul>
+        </div>
+
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">subscriptions</span>
+            <span class="entity-tag">MRR / ARR</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span class="field-fk">FK quote_id, customer</span> <span class="field-type">links</span></li>
+            <li><span>interval</span> <span class="field-type">monthly|quarterly</span></li>
+            <li><span>quantity, unit_price</span> <span class="field-type">pricing</span></li>
+            <li><span>status</span> <span class="field-type">active|paused|cancelled</span></li>
+          </ul>
+        </div>
+
+        <div class="entity-card">
+          <div class="entity-header">
+            <span class="entity-name">billing & invoices</span>
+            <span class="entity-tag">Revenue</span>
+          </div>
+          <ul class="entity-fields">
+            <li><span class="field-pk">PK id</span> <span class="field-type">serial</span></li>
+            <li><span>invoice_number</span> <span class="field-type">INV-2026-XXXX</span></li>
+            <li><span class="field-fk">FK quote_id, customer</span> <span class="field-type">links</span></li>
+            <li><span>total, status</span> <span class="field-type">draft|posted|paid</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Data Lifecycle Pipeline -->
+  <div class="connector-banner">
+    <div class="step-node">
+      <span class="step-num">1</span>
+      <div><strong>Customer & Catalog</strong><br><span style="color:var(--text-muted)">Tier caps & catalog pricing</span></div>
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-node">
+      <span class="step-num">2</span>
+      <div><strong>Quote Line Config</strong><br><span style="color:var(--text-muted)">Discounts & margin check</span></div>
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-node">
+      <span class="step-num">3</span>
+      <div><strong>Risk & Approval</strong><br><span style="color:var(--text-muted)">Automated or Manager routing</span></div>
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-node">
+      <span class="step-num">4</span>
+      <div><strong>Customer Portal Link</strong><br><span style="color:var(--text-muted)">Review, counter-offer & confirm</span></div>
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-node">
+      <span class="step-num">5</span>
+      <div><strong>Auto-Split Warehouse</strong><br><span style="color:var(--text-muted)">Least-cost package allocation</span></div>
+    </div>
+    <span class="step-arrow">&rarr;</span>
+    <div class="step-node">
+      <span class="step-num">6</span>
+      <div><strong>Recurring Invoicing</strong><br><span style="color:var(--text-muted)">12-cycle schedule & paid status</span></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>DealFlow360 - Enterprise Quotation, Fulfillment, & Subscription Revenue System</span>
+    <span>PostgreSQL + Drizzle ORM Schema • Clean Architecture • Zero Emojis</span>
+  </footer>
+
+</body>
+</html>
