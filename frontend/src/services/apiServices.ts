@@ -278,6 +278,19 @@ export const billingApi = {
     const res = await api.post(`/billing/subscriptions/${id}/cancel`, data);
     return res.data;
   },
+  createSubscription: async (data: {
+    customer_id: number;
+    product_id?: number;
+    plan_id?: number;
+    quantity?: number;
+    unit_price?: number;
+    interval?: string;
+    starts_at?: string;
+    quote_id?: number;
+  }) => {
+    const res = await api.post('/billing/subscriptions', data);
+    return res.data;
+  },
   getPlans: async () => {
     const res = await api.get('/billing/plans');
     return res.data;

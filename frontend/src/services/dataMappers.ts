@@ -209,10 +209,10 @@ export function mapSubscription(sub: any): SubscriptionItem {
   return {
     id: str(sub.id),
     reference: `SUB/${str(sub.id).padStart(5, '0')}`,
-    customerName: sub.customer?.name || sub.customerName || 'Unknown',
-    planName: sub.product?.name || sub.planName || 'Subscription',
-    startDate: dateStr(sub.startsAt || sub.startDate),
-    nextBillingDate: dateStr(sub.currentPeriodEnd || sub.nextBillingDate),
+    customerName: sub.customer?.name || sub.customerName || sub.customer_name || 'Unknown',
+    planName: sub.plan_name || sub.product?.name || sub.product_name || sub.planName || 'Subscription',
+    startDate: dateStr(sub.startsAt || sub.startDate || sub.starts_at),
+    nextBillingDate: dateStr(sub.currentPeriodEnd || sub.nextBillingDate || sub.current_period_end),
     billingFrequency: INTERVAL_MAP[sub.interval] || 'Monthly',
     status: sub.status === 'active' ? 'Active'
       : sub.status === 'paused' ? 'Paused'

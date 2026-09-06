@@ -92,6 +92,7 @@ const router = createBrowserRouter([
       { path: '/fulfillment/:id', element: <Suspense fallback={<PageLoader />}><FulfillmentDetailPage /></Suspense> },
       { path: '/fulfillment/:id/stock', element: <Suspense fallback={<PageLoader />}><FulfillmentStockPage /></Suspense> },
       { path: '/subscriptions', element: <Suspense fallback={<PageLoader />}><SubscriptionsListPage /></Suspense> },
+      { path: '/subscriptions/new', element: <Suspense fallback={<PageLoader />}><SubscriptionsListPage /></Suspense> },
       { path: '/subscriptions/:id', element: <Suspense fallback={<PageLoader />}><SubscriptionDetailPage /></Suspense> },
       { path: '/invoices', element: <Suspense fallback={<PageLoader />}><InvoicesListPage /></Suspense> },
       { path: '/invoices/:id', element: <Suspense fallback={<PageLoader />}><InvoiceDetailPage /></Suspense> },

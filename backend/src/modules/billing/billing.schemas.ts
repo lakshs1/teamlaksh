@@ -15,6 +15,19 @@ export const subscriptionQuerySchema = z
   })
   .openapi("SubscriptionQuery");
 
+export const createSubscriptionSchema = z
+  .object({
+    customer_id: z.coerce.number().int().positive("Customer ID is required").openapi({ example: 1 }),
+    product_id: z.coerce.number().int().positive().optional().openapi({ example: 2 }),
+    plan_id: z.coerce.number().int().positive().optional().openapi({ example: 1 }),
+    quantity: z.coerce.number().int().min(1).default(1).openapi({ example: 1 }),
+    unit_price: z.coerce.number().min(0).optional().openapi({ example: 99.0 }),
+    interval: z.enum(["monthly", "quarterly", "yearly"]).default("monthly").openapi({ example: "monthly" }),
+    starts_at: z.coerce.date().optional().openapi({ example: "2026-09-06" }),
+    quote_id: z.coerce.number().int().optional(),
+  })
+  .openapi("CreateSubscriptionRequest");
+
 export const updateSubscriptionSchema = z
   .object({
     quantity: z.coerce

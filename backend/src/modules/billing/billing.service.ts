@@ -187,6 +187,108 @@ export async function getSubscriptionById(id: number) {
   };
 }
 
+export async function createSubscription(input: {
+  customer_id: number;
+  product_id?: number;
+  plan_id?: number;
+  quantity?: number;
+  unit_price?: number;
+  interval?: string;
+  starts_at?: Date;
+  quote_id?: number;
+}) {
+  const [cust] = await db.select().from(customers).where(eq(customers.id, input.customer_id)).limit(1);
+  if (!cust) throw ApiError.notFound(`Customer with ID ${input.customer_id} not found`);
+
+  let productId = input.product_id;
+  let unitPrice = input.unit_price;
+  let interval = input.interval || "monthly";
+
+  if (input.plan_id) {
+    const [plan] = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, input.plan_id)).limit(1);
+    if (plan) {
+      productId = productId || plan.productId || undefined;
+      unitPrice = unitPrice !== undefined ? unitPrice : Number(plan.basePrice);
+      interval = plan.interval || interval;
+    }
+  }
+
+  if (!productId) {
+    const [recProd] = await db.select().from(products).where(eq(products.isRecurring, true)).limit(1);
+    const fallback = recProd || (await db.select().from(products).limit(1))[0];
+    if (!fallback) throw ApiError.badRequest("No products found in catalog to attach subscription");
+    productId = fallback.id;
+    if (unitPrice === undefined) unitPrice = Number(fallback.basePrice);
+  }
+
+  if (unitPrice === undefined) {
+    const [p] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+    unitPrice = Number(p?.basePrice || 100);
+  }
+
+  let quoteId = input.quote_id;
+  let quoteLineId: number | undefined;
+
+  if (quoteId) {
+    const [line] = await db.select().from(quoteLines).where(eq(quoteLines.quoteId, quoteId)).limit(1);
+    quoteLineId = line?.id;
+  }
+
+  if (!quoteId || !quoteLineId) {
+    const [q] = await db.select().from(quotes).where(eq(quotes.customerId, input.customer_id)).limit(1);
+    if (q) {
+      quoteId = q.id;
+      const [line] = await db.select().from(quoteLines).where(eq(quoteLines.quoteId, q.id)).limit(1);
+      quoteLineId = line?.id;
+    }
+  }
+
+  if (!quoteId || !quoteLineId) {
+    const [anyLine] = await db.select().from(quoteLines).limit(1);
+    if (anyLine) {
+      quoteId = anyLine.quoteId;
+      quoteLineId = anyLine.id;
+    } else {
+      const [anyQuote] = await db.select().from(quotes).limit(1);
+      quoteId = anyQuote?.id || 1;
+      quoteLineId = 1;
+    }
+  }
+
+  const now = input.starts_at || new Date();
+  const periodEnd = addInterval(now, interval, 1);
+  const qty = input.quantity && input.quantity > 0 ? input.quantity : 1;
+
+  const [sub] = await db
+    .insert(subscriptions)
+    .values({
+      quoteId,
+      quoteLineId,
+      customerId: input.customer_id,
+      productId,
+      planId: input.plan_id || null,
+      quantity: qty,
+      unitPrice: unitPrice.toFixed(2),
+      interval,
+      status: "active",
+      startsAt: now,
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+    })
+    .returning();
+
+  await generateEagerBillingSchedules(
+    sub.id,
+    now,
+    interval,
+    sub.quantity,
+    Number(sub.unitPrice),
+    12
+  );
+
+  return getSubscriptionById(sub.id);
+}
+
 /**
  * Mid-cycle seat update with plan-configured proration calculation.
  * Updates future schedules and creates an invoice/credit note for the prorated delta.

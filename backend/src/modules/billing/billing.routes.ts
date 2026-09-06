@@ -4,6 +4,7 @@ import { validate } from "../../middleware/validate.middleware.js";
 import {
   listSubscriptionsHandler,
   getSubscriptionByIdHandler,
+  createSubscriptionHandler,
   updateSubscriptionHandler,
   cancelSubscriptionHandler,
   listSubscriptionPlansHandler,
@@ -18,6 +19,7 @@ import {
   createInvoiceHandler,
 } from "./billing.controller.js";
 import {
+  createSubscriptionSchema,
   updateSubscriptionSchema,
   createSubscriptionPlanSchema,
   updateSubscriptionPlanSchema,
@@ -28,6 +30,13 @@ const router = Router();
 // ── Subscriptions ─────────────────────────────────────────
 router.get("/subscriptions", authenticate, listSubscriptionsHandler);
 router.get("/subscriptions/:id", authenticate, getSubscriptionByIdHandler);
+router.post(
+  "/subscriptions",
+  authenticate,
+  authorize("rep", "finance", "operations", "finance_operations", "admin"),
+  validate({ body: createSubscriptionSchema }),
+  createSubscriptionHandler
+);
 router.patch(
   "/subscriptions/:id",
   authenticate,

@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import {
   listSubscriptions,
   getSubscriptionById,
+  createSubscription,
   updateSubscription,
   cancelSubscription,
   listSubscriptionPlans,
@@ -18,6 +19,7 @@ import {
 
 import {
   subscriptionQuerySchema,
+  createSubscriptionSchema,
   updateSubscriptionSchema,
   createSubscriptionPlanSchema,
   updateSubscriptionPlanSchema,
@@ -30,6 +32,16 @@ export async function listSubscriptionsHandler(req: Request, res: Response, next
     const query = subscriptionQuerySchema.parse(req.query);
     const data = await listSubscriptions(query);
     res.status(200).json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createSubscriptionHandler(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = createSubscriptionSchema.parse(req.body);
+    const data = await createSubscription(body);
+    res.status(201).json({ success: true, data });
   } catch (err) {
     next(err);
   }
