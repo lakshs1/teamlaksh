@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "install:all": "npm install --prefix db && npm install --prefix backend && npm install --prefix frontend",
     "db:studio": "npm --prefix db run db:studio",
     "db:generate": "npm --prefix db run db:generate",
     "db:migrate": "npm --prefix db run db:migrate",
     "db:push": "npm --prefix db run db:push",
-    "dev": "npm --prefix db run dev",
-    "start": "npm --prefix db run start"
+    "seed:demo": "npm --prefix backend run seed:demo",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev"
   }
 }
