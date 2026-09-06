@@ -39,7 +39,6 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div className={styles.errorContainer}>
-          <span className={styles.icon}>⚠️</span>
           <h2 className={styles.title}>Something went wrong</h2>
           <p className={styles.message}>
             An unexpected application error occurred. You can reload the page to restore state.

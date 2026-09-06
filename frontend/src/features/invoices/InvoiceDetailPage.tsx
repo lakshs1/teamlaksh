@@ -195,17 +195,17 @@ export default function InvoiceDetailPage() {
 
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button className="odoo-btn odoo-btn-primary" onClick={() => setShowSendModal(true)}>
-            ✉ Send by Email
+            Send by Email
           </button>
           <button className="odoo-btn odoo-btn-secondary" onClick={handleDownloadPdf}>
-            📄 Download / Print PDF
+            Download / Print PDF
           </button>
           <button
             className="odoo-btn odoo-btn-secondary"
             style={{ borderColor: '#F59E0B', color: '#B45309', fontWeight: 600 }}
             onClick={() => setShowCreditModal(true)}
           >
-            💰 Issue Credit Note / Adjustment
+            Issue Credit Note / Adjustment
           </button>
           {item.status !== 'Paid' && (
             <button
@@ -213,7 +213,7 @@ export default function InvoiceDetailPage() {
               style={{ backgroundColor: '#714B67', color: '#FFF', fontWeight: 700 }}
               onClick={() => setShowPaymentModal(true)}
             >
-              ⚡ Register Payment
+              Register Payment
             </button>
           )}
           <button className="odoo-btn odoo-btn-secondary" onClick={() => navigate('/invoices')}>
@@ -227,7 +227,7 @@ export default function InvoiceDetailPage() {
         <div className="no-print" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '0.875rem 1.25rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontWeight: 700, color: '#1E40AF', fontSize: '0.9375rem' }}>
-              ℹ Billing Adjustments & Credit Notes Active
+              Billing Adjustments & Credit Notes Active
             </div>
             <div style={{ color: '#3B82F6', fontSize: '0.8125rem', marginTop: 2 }}>
               Total credit adjustment of ₹{totalCredits.toLocaleString('en-IN')} applied against original billed total ₹{item.amount.toLocaleString('en-IN')}.
@@ -426,7 +426,7 @@ export default function InvoiceDetailPage() {
         <div className="odoo-modal-backdrop">
           <div className="odoo-modal-box" style={{ maxWidth: 520, boxSizing: 'border-box' }}>
             <div className="odoo-modal-header">
-              <h3 style={{ margin: 0, fontWeight: 700, color: '#714B67' }}>⚡ Register Customer Payment</h3>
+              <h3 style={{ margin: 0, fontWeight: 700, color: '#714B67' }}>Register Customer Payment</h3>
               <button className="odoo-btn-close" onClick={() => setShowPaymentModal(false)}>✕</button>
             </div>
             <div style={{ padding: '1.25rem' }}>
@@ -497,7 +497,7 @@ export default function InvoiceDetailPage() {
         <div className="odoo-modal-backdrop">
           <div className="odoo-modal-box" style={{ maxWidth: 540, boxSizing: 'border-box' }}>
             <div className="odoo-modal-header">
-              <h3 style={{ margin: 0, fontWeight: 700, color: '#B45309' }}>💰 Issue Credit Note / Adjustment</h3>
+              <h3 style={{ margin: 0, fontWeight: 700, color: '#B45309' }}>Issue Credit Note / Adjustment</h3>
               <button className="odoo-btn-close" onClick={() => setShowCreditModal(false)}>✕</button>
             </div>
             <div style={{ padding: '1.25rem' }}>
@@ -585,7 +585,7 @@ export default function InvoiceDetailPage() {
         <div className="odoo-modal-backdrop">
           <div className="odoo-modal-box" style={{ maxWidth: 500, boxSizing: 'border-box' }}>
             <div className="odoo-modal-header">
-              <h3 style={{ margin: 0, fontWeight: 700, color: '#714B67' }}>✉ Send Invoice via Email</h3>
+              <h3 style={{ margin: 0, fontWeight: 700, color: '#714B67' }}>Send Invoice via Email</h3>
               <button className="odoo-btn-close" onClick={() => setShowSendModal(false)}>✕</button>
             </div>
             <div style={{ padding: '1.25rem' }}>

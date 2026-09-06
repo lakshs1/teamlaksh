@@ -1015,8 +1015,7 @@ export default function CreateQuotationPage() {
         {showUpsell && (
           <div className="odoo-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ fontSize: '1.1rem' }}>💡</span>
+              <div>
                 <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1F2937' }}>
                   AI Upsell & Recommendations
                 </h3>
@@ -1088,7 +1087,7 @@ export default function CreateQuotationPage() {
             ))}
 
             <div style={{ backgroundColor: '#F1F5F9', borderRadius: 6, padding: '0.6rem 0.75rem', fontSize: '0.7rem', color: '#64748B' }}>
-              ℹ️ Adding suggestions updates the gross margin indicator and re-evaluates approval governance in real time.
+              Adding suggestions updates the gross margin indicator and re-evaluates approval governance in real time.
             </div>
           </div>
         )}

@@ -145,8 +145,8 @@ export default function ApprovalDetailPage() {
               }}
             >
               {item.currentStatus === 'pending_manager'
-                ? '⏳ Awaiting Level 1 Manager sign-off'
-                : '⚡ Awaiting Level 2 Finance sign-off'}
+                ? 'Awaiting Level 1 Manager sign-off'
+                : 'Awaiting Level 2 Finance sign-off'}
             </span>
           )}
           <button className="odoo-btn odoo-btn-secondary" onClick={() => navigate('/approvals')}>
@@ -177,7 +177,7 @@ export default function ApprovalDetailPage() {
                 style={{ fontWeight: 700, color: '#714B67', cursor: 'pointer' }}
                 onClick={() => navigate(`/quotations/${item.quotationId}`)}
               >
-                {item.quotationId ? `Q/${String(item.quotationId).padStart(5, '0')}` : item.reference} ↗
+                {item.quotationId ? `Q/${String(item.quotationId).padStart(5, '0')}` : item.reference}
               </div>
             </div>
           </div>

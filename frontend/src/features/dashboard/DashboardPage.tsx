@@ -38,10 +38,10 @@ export default function DashboardPage() {
         const avgRating = salesData.avgRating || 4.8;
 
         setMetrics([
-          { icon: '📊', label: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, trend: '↑ +14% this week' },
-          { icon: '👥', label: 'Active Users', value: activeUsers.toLocaleString(), trend: '↑ +8% this month' },
-          { icon: '📦', label: 'Orders', value: totalOrders.toLocaleString(), trend: '→ Steady' },
-          { icon: '⭐', label: 'Avg Rating', value: avgRating.toString(), trend: '↑ +0.2 this week' },
+          { label: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, trend: '↑ +14% this week' },
+          { label: 'Active Users', value: activeUsers.toLocaleString(), trend: '↑ +8% this month' },
+          { label: 'Orders', value: totalOrders.toLocaleString(), trend: '→ Steady' },
+          { label: 'Avg Rating', value: avgRating.toString(), trend: '↑ +0.2 this week' },
         ]);
 
         // Merge quotes and invoices into activity feed
@@ -108,7 +108,6 @@ export default function DashboardPage() {
           <Card key={kpi.label} variant="bordered" padding="md" className={styles.kpiCard}>
             <div className={styles.kpiHeader}>
               <span className={styles.kpiLabel}>{kpi.label}</span>
-              <span className={styles.kpiIcon}>{kpi.icon}</span>
             </div>
             <div className={styles.kpiValue}>{kpi.value}</div>
             <div className={styles.kpiTrend}>{kpi.trend}</div>

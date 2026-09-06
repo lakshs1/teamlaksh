@@ -248,7 +248,7 @@ export default function FulfillmentStockPage() {
                   setShowPrintSlip(false);
                 }}
               >
-                🖨️ Send to Printer
+                Send to Printer
               </button>
             </div>
           </div>

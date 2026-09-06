@@ -151,7 +151,6 @@ export default function ApprovalsListPage() {
     return (
       <div className="odoo-container">
         <div style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>⏳</div>
           Loading approval governance queue...
         </div>
       </div>
@@ -531,7 +530,6 @@ export default function ApprovalsListPage() {
             {filteredApprovals.length === 0 && (
               <tr>
                 <td colSpan={10} style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748B' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📋</div>
                   <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#334155' }}>
                     {activeTab === 'my_queue'
                       ? `No items currently waiting for ${currentRole} action.`

@@ -318,9 +318,8 @@ export default function FulfillmentDetailPage() {
             }}
           >
             <div>
-              <div style={{ fontWeight: 700, color: '#1E40AF', fontSize: '0.9375rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>📦</span>
-                <span>Stock Arrived Mid-Fulfillment!</span>
+              <div style={{ fontWeight: 700, color: '#1E40AF', fontSize: '0.9375rem' }}>
+                Stock Arrived Mid-Fulfillment!
               </div>
               <div style={{ fontSize: '0.8125rem', color: '#1E3A8A', marginTop: '0.2rem' }}>
                 New inventory has been detected in warehouses for your backordered lines (
@@ -334,7 +333,7 @@ export default function FulfillmentDetailPage() {
               className="odoo-btn odoo-btn-primary"
               style={{ padding: '0.5rem 1rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}
             >
-              {consolidating ? 'Consolidating...' : 'Consolidate Remaining Backorder ↗'}
+              {consolidating ? 'Consolidating...' : 'Consolidate Remaining Backorder'}
             </button>
           </div>
         )}
@@ -352,7 +351,7 @@ export default function FulfillmentDetailPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
               <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#92400E' }}>
-                ⚠️ Active Backorders for Order ({item.backorderedItems.length} lines deficit)
+                Active Backorders for Order ({item.backorderedItems.length} lines deficit)
               </div>
               <button
                 onClick={handleSimulateRestock}
@@ -361,7 +360,7 @@ export default function FulfillmentDetailPage() {
                 style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem', borderColor: '#D97706', color: '#92400E' }}
                 title="Simulates stock arrival in warehouse to test mid-fulfillment backorder consolidation"
               >
-                {simulatingRestock ? 'Restocking...' : '⚡ Simulate Inbound Restock'}
+                {simulatingRestock ? 'Restocking...' : 'Simulate Inbound Restock'}
               </button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -603,7 +602,7 @@ export default function FulfillmentDetailPage() {
                   className="odoo-btn odoo-btn-primary"
                   disabled={submittingOverride}
                 >
-                  {submittingOverride ? 'Saving Override...' : 'Apply Manual Split ↗'}
+                  {submittingOverride ? 'Saving Override...' : 'Apply Manual Split'}
                 </button>
               </div>
             </div>

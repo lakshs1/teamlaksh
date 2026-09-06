@@ -338,7 +338,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      odoo-evaluators (Gold Tier) ⭐
+                      odoo-evaluators (Gold Tier)
                     </button>
                     <button
                       type="button"
@@ -387,7 +387,7 @@ export default function AuthPortalPage() {
                     className="odoo-btn odoo-btn-primary"
                     style={{ width: '100%', padding: '0.85rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}
                   >
-                    Log In to Customer Portal ↗
+                    Log In to Customer Portal
                   </button>
                 </form>
 
@@ -438,7 +438,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#714B67', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      Ayush (Sales Rep) 💼
+                      Ayush (Sales Rep)
                     </button>
                     <button
                       type="button"
@@ -449,7 +449,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#0D9488', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      Lakshya (Sales Manager) 👔
+                      Lakshya (Sales Manager)
                     </button>
                     <button
                       type="button"
@@ -460,7 +460,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#0284C7', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      Operations & Finance ⚙️
+                      Operations & Finance
                     </button>
                     <button
                       type="button"
@@ -471,7 +471,7 @@ export default function AuthPortalPage() {
                       }}
                       style={{ background: '#1E293B', color: '#FFF', border: 'none', borderRadius: 4, padding: '0.25rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                     >
-                      Mawiya (Admin) 🛡️
+                      Mawiya (Admin)
                     </button>
                   </div>
                 </div>
@@ -649,7 +649,7 @@ export default function AuthPortalPage() {
                         className="odoo-btn odoo-btn-primary"
                         style={{ width: '100%', padding: '0.85rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', cursor: 'pointer', marginTop: '0.5rem' }}
                       >
-                        Create Customer Account & Access Portal ↗
+                        Create Customer Account & Access Portal
                       </button>
                     </form>
                   </div>

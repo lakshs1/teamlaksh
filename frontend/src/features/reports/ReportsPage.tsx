@@ -141,10 +141,10 @@ export default function ReportsPage() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }} className="no-print">
           <button className="odoo-btn odoo-btn-secondary" onClick={handleExportPdf}>
-            📄 Export PDF
+            Export PDF
           </button>
           <button className="odoo-btn odoo-btn-primary" onClick={handleExportXls}>
-            📊 Export XLS
+            Export XLS
           </button>
         </div>
       </div>
@@ -153,7 +153,7 @@ export default function ReportsPage() {
       <div className="odoo-card" style={{ marginBottom: '1.5rem', padding: '1.25rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: '#1F2937', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            🎯 Reporting Filters
+            Reporting Filters
           </h3>
           <button
             className="odoo-btn odoo-btn-secondary"
@@ -301,7 +301,6 @@ export default function ReportsPage() {
 
       {loading ? (
         <div style={{ padding: '3rem', textAlign: 'center', color: '#64748B' }}>
-          <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>⏳</div>
           Updating sales report...
         </div>
       ) : (
@@ -310,7 +309,7 @@ export default function ReportsPage() {
           <div className="odoo-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8F9FA' }}>
               <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: '#1F2937', margin: 0 }}>
-                👤 Sales Rep Performance Breakdown
+                Sales Rep Performance Breakdown
               </h3>
             </div>
             <div className="odoo-table-container" style={{ margin: 0 }}>
@@ -348,7 +347,7 @@ export default function ReportsPage() {
           <div className="odoo-card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8F9FA' }}>
               <h3 style={{ fontSize: '0.875rem', fontWeight: 800, color: '#1F2937', margin: 0 }}>
-                📦 Product Category Volume Breakdown
+                Product Category Volume Breakdown
               </h3>
             </div>
             <div className="odoo-table-container" style={{ margin: 0 }}>

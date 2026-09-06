@@ -214,7 +214,7 @@ export default function DealHealthDashboardPage() {
                   style={{ fontWeight: 700, color: '#714B67', cursor: 'pointer' }}
                   onClick={() => navigate(alert.quoteId ? `/quotations/${alert.quoteId}` : `/quotations`)}
                 >
-                  {alert.quotationRef} ↗
+                  {alert.quotationRef}
                 </td>
                 <td style={{ fontWeight: 600 }}>{alert.customerName}</td>
                 <td>{alert.repName}</td>

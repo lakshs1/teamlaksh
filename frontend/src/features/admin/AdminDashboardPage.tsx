@@ -4,10 +4,10 @@ import { Badge } from '../../components/ui/Badge';
 import styles from './AdminDashboardPage.module.css';
 
 const KPI = [
-  { icon: '👥', label: 'Total Users', value: '2,847', trend: '↑ +12% this month' },
-  { icon: '💰', label: 'Revenue', value: '$48,200', trend: '↑ +18% this month' },
-  { icon: '📦', label: 'Total Orders', value: '1,523', trend: 'Platform lifetime' },
-  { icon: '⚡', label: 'Active Sessions', value: '342', trend: 'Right now' },
+  { label: 'Total Users', value: '2,847', trend: '↑ +12% this month' },
+  { label: 'Revenue', value: '$48,200', trend: '↑ +18% this month' },
+  { label: 'Total Orders', value: '1,523', trend: 'Platform lifetime' },
+  { label: 'Active Sessions', value: '342', trend: 'Right now' },
 ];
 
 const RECENT_USERS = [
@@ -40,7 +40,6 @@ export default function AdminDashboardPage() {
           <Card key={kpi.label} variant="bordered" padding="md" className={styles.kpiCard}>
             <div className={styles.kpiHeader}>
               <span className={styles.kpiLabel}>{kpi.label}</span>
-              <span className={styles.kpiIcon}>{kpi.icon}</span>
             </div>
             <div className={styles.kpiValue}>{kpi.value}</div>
             <div className={styles.kpiTrend}>{kpi.trend}</div>
@@ -51,7 +50,6 @@ export default function AdminDashboardPage() {
       {/* Alert Banner */}
       <div className={styles.alertBanner}>
         <div className={styles.alertLeft}>
-          <span className={styles.alertIcon}>⚠️</span>
           <div>
             <h2 className={styles.alertTitle}>3 Pending Reviews</h2>
             <p className={styles.alertText}>New submissions require admin review before publishing.</p>

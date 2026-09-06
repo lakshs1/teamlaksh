@@ -36,7 +36,7 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-      console.warn('⚠️ Network request timed out over remote tunnel:', err.config?.url);
+      console.warn('Network request timed out over remote tunnel:', err.config?.url);
       err.message = 'The server took longer than expected to respond over the database tunnel. Please retry.';
     }
     if (err.response?.status === 401) {

@@ -289,7 +289,7 @@ export default function QuotationDetailPage() {
               navigate(`/portal/${portalToken}`);
             }}
           >
-            Open Customer Portal Link ↗
+            Open Customer Portal Link
           </button>
           <button className="odoo-btn odoo-btn-secondary">Send by Email</button>
           <button
@@ -322,8 +322,8 @@ export default function QuotationDetailPage() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 800, color: '#92400E', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span>⚡</span> Customer Counter-Offer: {counterPct}% Discount Proposed
+                <div style={{ fontWeight: 800, color: '#92400E', fontSize: '0.95rem' }}>
+                  Customer Counter-Offer: {counterPct}% Discount Proposed
                 </div>
                 <div style={{ fontSize: '0.8125rem', color: '#B45309', marginTop: '0.25rem' }}>
                   "{activeCounterOffer.message}" — Submitted by {activeCounterOffer.authorName || activeCounterOffer.author_name || 'Customer'}
@@ -343,13 +343,13 @@ export default function QuotationDetailPage() {
                   onClick={() => setShowRepCounterModal(true)}
                   style={{ fontWeight: 600 }}
                 >
-                  ⚡ Propose Counter-Offer
+                  Propose Counter-Offer
                 </button>
                 <button
                   className="odoo-btn odoo-btn-secondary"
                   onClick={() => setActiveTab('negotiation')}
                 >
-                  💬 View Negotiation History
+                  View Negotiation History
                 </button>
               </div>
             </div>
@@ -594,7 +594,7 @@ export default function QuotationDetailPage() {
                     onClick={() => setShowRepCounterModal(true)}
                     style={{ fontSize: '0.8125rem', fontWeight: 600 }}
                   >
-                    ⚡ Propose Counter-Offer
+                    Propose Counter-Offer
                   </button>
                   {activeCounterOffer && (
                     <button
@@ -795,7 +795,7 @@ export default function QuotationDetailPage() {
           <div style={{ background: '#FFF', padding: '1.5rem', borderRadius: 12, width: 440, maxWidth: '90%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#1F2937' }}>
-                ⚡ Propose Sales Counter-Offer to Customer
+                Propose Sales Counter-Offer to Customer
               </h3>
               <button
                 onClick={() => setShowRepCounterModal(false)}

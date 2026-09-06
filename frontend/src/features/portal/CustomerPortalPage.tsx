@@ -502,7 +502,6 @@ export default function CustomerPortalPage() {
             transition: 'all 150ms ease',
           }}
         >
-          <span>📑</span>
           <span>My Quotations & Negotiation</span>
           {liveQuote && (
             <span
@@ -536,7 +535,6 @@ export default function CustomerPortalPage() {
             transition: 'all 150ms ease',
           }}
         >
-          <span>🛍️</span>
           <span>Browse Product Catalogs</span>
           <span
             style={{
@@ -582,9 +580,7 @@ export default function CustomerPortalPage() {
                   fontSize: '1.8rem',
                   margin: '0 auto 1.25rem auto',
                 }}
-              >
-                📋
-              </div>
+              />
               <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#1F2937', marginBottom: '0.5rem' }}>
                 No Active Quotation Published Yet
               </h2>
@@ -597,7 +593,7 @@ export default function CustomerPortalPage() {
                   className="odoo-btn odoo-btn-primary"
                   style={{ padding: '0.65rem 1.3rem', fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
                 >
-                  Browse Product Catalogs ↗
+                  Browse Product Catalogs
                 </button>
               </div>
             </div>
@@ -621,8 +617,8 @@ export default function CustomerPortalPage() {
                   }}
                 >
                   <div>
-                    <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span>🎉</span> Special Revised Offer: Sales Team Proposes {latestCounterMsg.counterDiscountPct}% Discount!
+                    <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem' }}>
+                      Special Revised Offer: Sales Team Proposes {latestCounterMsg.counterDiscountPct}% Discount!
                     </div>
                     <div style={{ fontSize: '0.8125rem', color: '#15803D', marginTop: '0.25rem' }}>
                       "{latestCounterMsg.text}"
@@ -668,8 +664,8 @@ export default function CustomerPortalPage() {
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>✅</span> Counter-Offer Approved! Sales Team Accepted Your {latestCounterMsg.counterDiscountPct}% Discount
+                      <div style={{ fontWeight: 800, color: '#166534', fontSize: '0.95rem' }}>
+                        Counter-Offer Approved! Sales Team Accepted Your {latestCounterMsg.counterDiscountPct}% Discount
                       </div>
                       <div style={{ fontSize: '0.8125rem', color: '#15803D', marginTop: '0.25rem' }}>
                         Your requested concession has been applied to this quotation. Accept below to proceed to order fulfillment.
@@ -696,7 +692,6 @@ export default function CustomerPortalPage() {
                       gap: '0.6rem',
                     }}
                   >
-                    <span style={{ fontSize: '1.2rem' }}>📦</span>
                     <div>
                       <div style={{ fontWeight: 700, color: '#1D4ED8', fontSize: '0.875rem' }}>
                         Order Confirmed & In Fulfillment
@@ -722,7 +717,7 @@ export default function CustomerPortalPage() {
                     }}
                   >
                     <div style={{ fontSize: '0.8125rem', color: '#92400E' }}>
-                      ⏳ Your counter-proposal requesting <strong>{latestCounterMsg.counterDiscountPct}% discount</strong> is currently pending review by your Sales Representative / Manager.
+                      Your counter-proposal requesting <strong>{latestCounterMsg.counterDiscountPct}% discount</strong> is currently pending review by your Sales Representative / Manager.
                     </div>
                     <button
                       className="odoo-btn odoo-btn-secondary"
@@ -1024,7 +1019,7 @@ export default function CustomerPortalPage() {
                           }}
                           style={{ cursor: 'pointer' }}
                         >
-                          ⚡ Propose Sales Counter-Offer
+                          Propose Sales Counter-Offer
                         </button>
                         {liveQuote?.id && (
                           <button
@@ -1089,7 +1084,7 @@ export default function CustomerPortalPage() {
                 <input
                   type="text"
                   className="odoo-input"
-                  placeholder="🔍 Search catalog products or descriptions..."
+                  placeholder="Search catalog products or descriptions..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{ width: '100%', padding: '0.55rem 0.85rem', fontSize: '0.85rem' }}
@@ -1155,7 +1150,6 @@ export default function CustomerPortalPage() {
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="odoo-card" style={{ padding: '3rem', textAlign: 'center' }}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🔍</div>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1F2937' }}>No matching products found</h3>
               <p style={{ fontSize: '0.85rem', color: '#64748B' }}>Try adjusting your search terms or clearing category filters.</p>
               <button
@@ -1239,7 +1233,7 @@ export default function CustomerPortalPage() {
                         className="odoo-btn odoo-btn-primary"
                         style={{ padding: '0.45rem 0.85rem', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                       >
-                        Inquire in Quote ↗
+                        Inquire in Quote
                       </button>
                     </div>
                   </div>
@@ -1256,7 +1250,7 @@ export default function CustomerPortalPage() {
           <div style={{ background: '#FFF', padding: '1.5rem', borderRadius: 12, width: 440, maxWidth: '90%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0, color: '#1F2937' }}>
-                {counterType === 'rep' || isStaff ? '⚡ Propose Sales Counter-Offer' : 'Submit Counter Offer'}
+                {counterType === 'rep' || isStaff ? 'Propose Sales Counter-Offer' : 'Submit Counter Offer'}
               </h3>
               <button
                 onClick={() => setShowCounterModal(false)}
